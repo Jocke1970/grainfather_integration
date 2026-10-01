@@ -209,7 +209,7 @@ def _controller_runtime_metadata(
     device: GrainfatherFermentationDevice,
     coordinator: GrainfatherDataUpdateCoordinator,
 ) -> dict[str, Any]:
-    """Describe controller transport and any subscribe-only live MQTT observations."""
+    """Describe controller transport and live MQTT telemetry observations."""
     snapshot = coordinator.data
     if device.esp_chip_id:
         accessory = next(
