@@ -13,6 +13,7 @@ from .api import (
     GrainfatherAuthenticationError,
     GrainfatherSnapshot,
 )
+from .esp_runtime import GrainfatherEspRuntimeStore
 from .const import (
     BREW_SESSION_STATUS_COMPLETED,
     CONF_INCLUDE_COMPLETED_SESSIONS,
@@ -41,6 +42,7 @@ class GrainfatherDataUpdateCoordinator(DataUpdateCoordinator[GrainfatherSnapshot
         )
         self.api = api
         self.entry = entry
+        self.esp_runtime = GrainfatherEspRuntimeStore()
 
     async def _async_update_data(self) -> GrainfatherSnapshot:
         try:
