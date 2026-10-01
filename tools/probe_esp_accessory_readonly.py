@@ -46,7 +46,9 @@ def _request_json(
             f"{method} {url.split('?')[0]} failed with HTTP {err.code}: {detail[:300]}"
         ) from err
     except URLError as err:
-        raise RuntimeError(f"{method} {url.split('?')[0]} failed: {err.reason}") from err
+        raise RuntimeError(
+            f"{method} {url.split('?')[0]} failed: {err.reason}"
+        ) from err
 
 
 def _grainfather_login(email: str, password: str) -> tuple[str, str | None]:
@@ -58,7 +60,11 @@ def _grainfather_login(email: str, password: str) -> tuple[str, str | None]:
     if not isinstance(payload, dict):
         raise RuntimeError("Unexpected Grainfather login response")
 
-    token = payload.get("api_token") or payload.get("accessToken") or payload.get("token")
+    token = (
+        payload.get("api_token")
+        or payload.get("accessToken")
+        or payload.get("token")
+    )
     if not isinstance(token, str) or not token:
         raise RuntimeError("Grainfather login response did not contain an API token")
 
@@ -106,7 +112,10 @@ def _safe_accessory_summary(item: dict[str, Any]) -> dict[str, Any]:
 
 def main() -> int:
     print("BrewAssistant Grainfather — read-only ESP accessory probe")
-    print("No MQTT connection or controller command is made; tokens are never printed.\n")
+    print(
+        "No MQTT connection or controller command is made; "
+        "tokens are never printed.\n"
+    )
 
     email = input("Grainfather email: ").strip()
     password = getpass.getpass("Grainfather password: ")
@@ -134,7 +143,10 @@ def main() -> int:
 
     for device in fermentation_devices:
         esp_chip_id = device.get("esp_chip_id") or device.get("espChipId")
-        particle_device_id = device.get("particle_device_id") or device.get("particleDeviceId")
+        particle_device_id = (
+            device.get("particle_device_id")
+            or device.get("particleDeviceId")
+        )
         if not esp_chip_id and not particle_device_id:
             continue
 
@@ -154,7 +166,9 @@ def main() -> int:
         )
 
         accessory = (
-            accessories_by_chip.get(str(esp_chip_id).casefold()) if esp_chip_id else None
+            accessories_by_chip.get(str(esp_chip_id).casefold())
+            if esp_chip_id
+            else None
         )
         print("Matching accessory:")
         print(
