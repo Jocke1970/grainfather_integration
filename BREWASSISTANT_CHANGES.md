@@ -89,22 +89,33 @@ Verified application behavior:
   `data.heatStatus`, `data.coolStatus`, controller settings and session state;
 - retained `meta` payloads expose firmware/error/network metadata.
 
-Implemented read-only groundwork:
+Implemented read-only runtime:
 
-- fermentation-device records now retain `esp_chip_id` and `particle_device_id`;
+- fermentation-device records retain `esp_chip_id` and `particle_device_id`;
 - snapshots optionally discover accessory devices without making that endpoint a
   hard dependency for the stable REST/history path;
 - fermentation sensor attributes identify the discovered controller transport;
-- `esp_runtime.py` contains pure topic helpers and parsers for incoming
-  `events`, `meta` and `status` payloads;
+- `esp_runtime.py` contains topic helpers, payload parsers and an in-memory
+  subscribe-only live-state cache;
 - `tools/probe_esp_accessory_readonly.py` field-tests REST-side controller/accessory
   discovery without opening MQTT;
-- there is deliberately **no MQTT publish function** in the integration.
+- webpack source mapping identifies module 2517 as
+  `./shared/helpers/crypto-js/md5.js`, verifying that the current app uses the
+  Grainfather user ID as MQTT username and lowercase hexadecimal
+  `MD5("<user_id>BEVIE")` as MQTT password;
+- `esp_mqtt.py` implements a minimal MQTT 3.1.1 subscriber. It has deliberately
+  **no MQTT PUBLISH implementation** and therefore no command, setpoint or
+  `keepActive` path;
+- incoming live observations can expose broker/device online state, temperature,
+  target, heating, cooling, RSSI, control mode/status and controller metadata on
+  the existing fermentation entities.
 
-MQTT authentication is only partially verified from the app bundle. The app uses
-the Grainfather user ID as the MQTT username and derives the password by applying
-webpack module 2517 to `<user_id>BEVIE`. The exact hash implementation has not yet
-been independently identified, so a live MQTT client is intentionally not enabled.
+The app bundle verifies broker hostnames but its native MQTT wrapper still hides
+the exact socket port/TLS default. Until live Home Assistant testing settles that
+detail, the subscriber tries standard MQTT TLS/8883 first and TCP/1883 second on
+the primary broker, then the same candidates on the fallback broker. This transport
+fallback is provisional; the first field-verified working endpoint should become
+the documented default.
 
 REST/history remains the supported fallback and does not depend on MQTT.
 
