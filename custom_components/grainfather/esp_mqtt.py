@@ -1,17 +1,17 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Callable
-from contextlib import suppress
-from dataclasses import dataclass
 import logging
 import secrets
 import ssl
+from collections.abc import Callable
+from contextlib import suppress
+from dataclasses import dataclass
 
 from .esp_runtime import (
-    GrainfatherEspRuntimeStore,
     PRIMARY_MQTT_BROKER,
     SECONDARY_MQTT_BROKER,
+    GrainfatherEspRuntimeStore,
     device_topic,
     mqtt_credentials,
 )
@@ -113,7 +113,8 @@ class GrainfatherEspMqttSubscriber:
                     raise
                 except Exception as err:  # noqa: BLE001 - transport fallback boundary
                     _LOGGER.debug(
-                        "Grainfather ESP MQTT subscribe-only connection failed via %s: %s",
+                        "Grainfather ESP MQTT subscribe-only connection failed "
+                        "via %s: %s",
                         endpoint.label,
                         err,
                     )
