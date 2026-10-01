@@ -31,6 +31,23 @@ The real GF30 used for BrewAssistant development has already shown
 `target_temperature` in Grainfather history, so this phase is based on field-observed
 2026 data rather than historical controller assumptions.
 
+## Live Particle probe result — 2026-10-01
+
+Field test against the linked GF30 account returned:
+
+```text
+Particle sessions returned by Grainfather: 0
+RESULT: no Particle session was returned.
+```
+
+Conclusion:
+
+- the historical Grainfather → Particle token path is **not available for this current linked GF30 account**;
+- `wardsimon/gfFermentation` and `mossman/grainfather_exporter` remain useful protocol/history references only;
+- current development should not depend on Particle runtime access;
+- realtime/status research moves to the current ESP/Grainfather backend;
+- REST/history remains the verified read-only fallback.
+
 ## Phase 2 — optional controller realtime discovery
 
 Historical projects `wardsimon/gfFermentation` and `mossman/grainfather_exporter`
