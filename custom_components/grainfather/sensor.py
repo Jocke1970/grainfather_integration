@@ -340,7 +340,9 @@ def _build_sensor_entities(
                 GrainfatherFermDeviceTemperatureSensor(coordinator, entry, device.device_id)
             )
 
-        target_unique_id = f"{entry.entry_id}_fermdevice_{device.device_id}_target_temperature"
+        target_unique_id = (
+            f"{entry.entry_id}_fermdevice_{device.device_id}_target_temperature"
+        )
         history = coordinator.data.fermentation_history_by_device_id.get(
             device.device_id,
             tuple(),
@@ -552,7 +554,9 @@ class GrainfatherFermDeviceTargetTemperatureSensor(
         super().__init__(coordinator)
         self._device_id = device_id
         self._attr_has_entity_name = True
-        self._attr_unique_id = f"{entry.entry_id}_fermdevice_{device_id}_target_temperature"
+        self._attr_unique_id = (
+            f"{entry.entry_id}_fermdevice_{device_id}_target_temperature"
+        )
 
     @property
     def _device(self) -> GrainfatherFermentationDevice | None:
