@@ -232,7 +232,18 @@ def _controller_runtime_metadata(
             "accessory_device_id": accessory.accessory_id if accessory else None,
             "accessory_device_type_id": accessory.device_type_id if accessory else None,
             "accessory_device_name": accessory.name if accessory else None,
-            "live_mqtt_connected": live.broker_connected if live else False,
+            "live_mqtt_transport_connected": (
+                live.broker_connected if live else False
+            ),
+            "live_mqtt_subscribed": live.mqtt_subscribed if live else False,
+            "live_mqtt_subscription_codes": (
+                list(live.subscription_codes)
+                if live and live.subscription_codes is not None
+                else None
+            ),
+            "live_mqtt_connected": (
+                bool(live and live.broker_connected and live.mqtt_subscribed)
+            ),
             "live_mqtt_broker": live.broker if live else None,
             "controller_online": live.device_online if live else None,
             "live_mqtt_last_message_at": (
