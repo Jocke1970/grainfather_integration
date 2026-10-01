@@ -38,7 +38,12 @@ jobs:
       - name: Pytest
         run: python -m pytest -q
 
-      - name: Ruff new BrewAssistant tools
+      - name: Ruff new BrewAssistant files
         # Upstream currently contains pre-existing Ruff debt. Keep this branch
         # from adding lint debt without rewriting unrelated upstream files.
-        run: python -m ruff check tools/probe_particle_readonly.py
+        run: >-
+          python -m ruff check
+          custom_components/grainfather/esp_runtime.py
+          tools/probe_particle_readonly.py
+          tools/probe_esp_accessory_readonly.py
+          tests/test_esp_runtime.py
