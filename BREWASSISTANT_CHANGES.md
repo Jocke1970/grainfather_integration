@@ -89,41 +89,57 @@ Verified application behavior:
   `data.heatStatus`, `data.coolStatus`, controller settings and session state;
 - retained `meta` payloads expose firmware/error/network metadata.
 
-Implemented read-only runtime:
+Implemented live telemetry runtime:
 
 - fermentation-device records retain `esp_chip_id` and `particle_device_id`;
 - snapshots optionally discover accessory devices without making that endpoint a
   hard dependency for the stable REST/history path;
 - fermentation sensor attributes identify the discovered controller transport;
 - `esp_runtime.py` contains topic helpers, payload parsers and an in-memory
-  subscribe-only live-state cache;
+  live-state cache;
 - `tools/probe_esp_accessory_readonly.py` field-tests REST-side controller/accessory
   discovery without opening MQTT;
 - webpack source mapping identifies module 2517 as
   `./shared/helpers/crypto-js/md5.js`, verifying that the current app uses the
   Grainfather user ID as MQTT username and lowercase hexadecimal
   `MD5("<user_id>BEVIE")` as MQTT password;
-- `esp_mqtt.py` implements a minimal MQTT 3.1.1 subscriber. It has deliberately
-  **no MQTT PUBLISH implementation** and therefore no command, setpoint or
-  `keepActive` path;
+- `esp_mqtt.py` implements a minimal MQTT 3.1.1 telemetry client;
+- live Home Assistant testing verified `mqtt.grainfather.com:8883` over TLS,
+  successful MQTT authentication and SUBACK result codes `[0, 0, 0, 0]`;
+- the controller publishes retained `status=true`, but current live `events`
+  only become active after the client mirrors the Grainfather app's telemetry
+  keepalive handshake;
+- the only controller-bound MQTT payload implemented by this phase is
+  `ESP_SUBSCRIPTION_TIME` command 23, with the exact app-observed values 15
+  seconds for initial activation and 120 seconds for refresh;
 - incoming live observations can expose broker/device online state, temperature,
   target, heating, cooling, RSSI, control mode/status and controller metadata on
   the existing fermentation entities.
 
-The app bundle verifies broker hostnames but its native MQTT wrapper still hides
-the exact socket port/TLS default. Until live Home Assistant testing settles that
-detail, the subscriber tries standard MQTT TLS/8883 first and TCP/1883 second on
-the primary broker, then the same candidates on the fallback broker. This transport
-fallback is provisional; the first field-verified working endpoint should become
-the documented default.
+The app behavior was field-verified in Home Assistant: opening the Grainfather app
+caused the GF30 to publish live `events`, which Home Assistant decoded as live
+temperature 22.8 C, target 22 C, heating/cooling false and control mode 0. The app
+source shows that `status=true` triggers `keepActive()`, while event payloads
+with `data.subTime < 25` trigger `keepActive(120)`.
+
+The telemetry client mirrors only that subscription-time behavior. There is no
+generic command publisher exposed to Home Assistant or BrewAssistant.
 
 REST/history remains the supported fallback and does not depend on MQTT.
 
 ## Write boundary
 
-No physical-controller write is approved by this branch at this stage.
+The only approved outbound MQTT write in this phase is the telemetry subscription
+handshake:
 
-Future target writes must use explicit Home Assistant/BrewAssistant authorization,
-post-write readback and visible failure handling. BrewAssistant must never directly
-control the GF30 heater or cooling circulation pump merely because historical
-repositories contain those function names.
+- topic: `devices/<chip_id>/command`;
+- command: `23` (`ESP_SUBSCRIPTION_TIME`);
+- allowed values: `"15"` and `"120"`;
+- purpose: request/refresh controller telemetry only.
+
+No target-temperature, control-mode, heater, cooling or profile write is approved
+by this branch at this stage. Those future writes must use explicit
+Home Assistant/BrewAssistant authorization, post-write readback and visible
+failure handling. BrewAssistant must never directly control the GF30 heater or
+cooling circulation pump merely because historical repositories contain those
+function names.
