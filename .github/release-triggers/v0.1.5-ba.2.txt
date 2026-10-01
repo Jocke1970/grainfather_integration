@@ -1,0 +1,1 @@
+Trigger BrewAssistant HACS test release v0.1.5-ba.2.
