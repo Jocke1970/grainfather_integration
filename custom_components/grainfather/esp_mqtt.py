@@ -200,16 +200,21 @@ class GrainfatherEspMqttSubscriber:
                 raise ConnectionError(
                     "MQTT SUBACK result count did not match subscription count"
                 )
-            if any(code == 0x80 for code in subscription_codes):
+
+            subscription_ok = not any(
+                code == 0x80 for code in subscription_codes
+            )
+            self._runtime_store.set_subscription_result(
+                list(self._chip_ids),
+                subscription_ok,
+                subscription_codes,
+            )
+            self._on_update()
+            if not subscription_ok:
                 raise ConnectionError(
                     f"MQTT subscription rejected: {subscription_codes}"
                 )
 
-            self._runtime_store.set_subscription_result(
-                list(self._chip_ids),
-                True,
-                subscription_codes,
-            )
             self._runtime_store.set_connection_error(
                 list(self._chip_ids),
                 None,
