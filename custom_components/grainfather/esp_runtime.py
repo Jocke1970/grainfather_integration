@@ -210,6 +210,7 @@ class GrainfatherEspLiveState:
     profiles: Any = None
     last_topic: str | None = None
     last_message_at: datetime | None = None
+    last_connection_error: str | None = None
 
 
 @dataclass(slots=True)
@@ -245,6 +246,14 @@ class GrainfatherEspRuntimeStore:
             state.broker_connected = connected
             if broker is not None:
                 state.broker = broker
+
+    def set_connection_error(
+        self,
+        chip_ids: tuple[str, ...] | list[str],
+        error: str | None,
+    ) -> None:
+        for chip_id in chip_ids:
+            self.ensure(chip_id).last_connection_error = error
 
     def ingest(
         self,
