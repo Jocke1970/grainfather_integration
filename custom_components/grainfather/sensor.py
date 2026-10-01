@@ -518,6 +518,7 @@ class GrainfatherFermDeviceTemperatureSensor(
         collaborators = _get_collaborating_devices(device, self.coordinator.data)
         return {
             "grainfather_entity_type": "fermentation_device",
+            "grainfather_measurement": "temperature",
             "device_id": device.device_id,
             "last_heard": device.last_heard,
             "last_specific_gravity": device.last_specific_gravity,
@@ -597,7 +598,8 @@ class GrainfatherFermDeviceTargetTemperatureSensor(
             tuple(),
         )
         return {
-            "grainfather_entity_type": "fermentation_device_target",
+            "grainfather_entity_type": "fermentation_device",
+            "grainfather_measurement": "target_temperature",
             "device_id": device.device_id,
             "linked_brew_session_id": device.linked_brew_session_id,
             "linked_brew_session_name": device.linked_brew_session_name,
@@ -661,6 +663,8 @@ class GrainfatherFermDeviceGravitySensor(
         )
         collaborators = _get_collaborating_devices(device, self.coordinator.data)
         return {
+            "grainfather_entity_type": "fermentation_device",
+            "grainfather_measurement": "gravity",
             "device_id": device.device_id,
             "last_heard": device.last_heard,
             "linked_brew_session_id": device.linked_brew_session_id,
