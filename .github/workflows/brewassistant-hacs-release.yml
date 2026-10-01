@@ -21,8 +21,6 @@ jobs:
       (github.event_name == 'pull_request' && startsWith(github.event.pull_request.title, '[release ba]'))
     runs-on: ubuntu-latest
     env:
-      TAG: v0.1.5-ba.1
-      RELEASE_TITLE: BrewAssistant Grainfather v0.1.5-ba.1
       TARGET_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.sha }}
     steps:
       - name: Checkout release target
@@ -30,6 +28,14 @@ jobs:
         with:
           ref: ${{ env.TARGET_SHA }}
           fetch-depth: 0
+
+      - name: Resolve release version
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="$(python -c 'import json; print(json.load(open("custom_components/grainfather/manifest.json"))["version"])')"
+          echo "TAG=v$VERSION" >> "$GITHUB_ENV"
+          echo "RELEASE_TITLE=BrewAssistant Grainfather v$VERSION" >> "$GITHUB_ENV"
 
       - name: Create tag if missing
         shell: bash
@@ -58,14 +64,14 @@ jobs:
           cat > /tmp/release-notes.md <<'EOF'
           BrewAssistant test release from `brewassistant-grainfather`.
 
-          This release keeps the stable Grainfather REST/history path and adds the
-          first read-only groundwork for the modern ESP controller runtime:
+          Read-only modern GF30 ESP/MQTT runtime:
 
-          - REST accessory-device discovery
-          - `esp_chip_id` / controller transport metadata
-          - read-only ESP event/meta/status parsers
-          - Grainfather MQTT broker/topic model
-          - no MQTT publish/controller-write implementation
+          - verified REST accessory/controller discovery and ESP chip matching
+          - verified MQTT username/password derivation from the current app
+          - subscribe-only MQTT 3.1.1 runtime with no PUBLISH implementation
+          - live temperature, target, heat/cool, controller mode/status and metadata
+          - safe connection diagnostics and REST/history fallback
+          - no controller command, setpoint write or `keepActive` path
 
           This is a BrewAssistant test build, not an upstream fidley release.
           EOF
