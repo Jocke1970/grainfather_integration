@@ -258,7 +258,8 @@ class GrainfatherEspRuntimeStore:
         for chip_id in chip_ids:
             state = self.ensure(chip_id)
             state.mqtt_subscribed = subscribed
-            state.subscription_codes = codes
+            if codes is not None:
+                state.subscription_codes = codes
 
     def set_connection_error(
         self,
