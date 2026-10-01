@@ -94,6 +94,7 @@ class GrainfatherHistoryPoint:
     brew_session_id: int | None
     timestamp: str | None
     temperature: float | None
+    target_temperature: float | None
     specific_gravity: float | None
     raw_payload: dict[str, Any]
 
@@ -619,6 +620,15 @@ def parse_fermentation_device_history_points(
             "last_heard",
         )
         temperature = _to_float(_first_value(item, "temperature", "temp", "last_temperature"))
+        target_temperature = _to_float(
+            _first_value(
+                item,
+                "target_temperature",
+                "targetTemperature",
+                "target_temp",
+                "targetTemp",
+            )
+        )
         specific_gravity = _to_float(
             _first_value(
                 item,
@@ -631,7 +641,7 @@ def parse_fermentation_device_history_points(
             )
         )
 
-        if temperature is None and specific_gravity is None:
+        if temperature is None and target_temperature is None and specific_gravity is None:
             continue
 
         points.append(
@@ -640,6 +650,7 @@ def parse_fermentation_device_history_points(
                 brew_session_id=brew_session_id,
                 timestamp=timestamp,
                 temperature=temperature,
+                target_temperature=target_temperature,
                 specific_gravity=specific_gravity,
                 raw_payload=deepcopy(item),
             )
