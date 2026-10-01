@@ -64,14 +64,16 @@ jobs:
           cat > /tmp/release-notes.md <<'EOF'
           BrewAssistant test release from `brewassistant-grainfather`.
 
-          Read-only modern GF30 ESP/MQTT runtime:
+          Modern GF30 ESP/MQTT telemetry runtime:
 
           - verified REST accessory/controller discovery and ESP chip matching
           - verified MQTT username/password derivation from the current app
-          - subscribe-only MQTT 3.1.1 runtime with no PUBLISH implementation
+          - field-verified MQTT TLS/8883 connection and subscriptions
           - live temperature, target, heat/cool, controller mode/status and metadata
+          - bounded telemetry keepalive matching the app's command 23 behavior
+          - only command 23 with values 15/120 may be published
+          - no target, control-mode, heater, cooling or profile write path
           - safe connection diagnostics and REST/history fallback
-          - no controller command, setpoint write or `keepActive` path
 
           This is a BrewAssistant test build, not an upstream fidley release.
           EOF
