@@ -202,6 +202,8 @@ class GrainfatherEspLiveState:
 
     chip_id: str
     broker_connected: bool = False
+    mqtt_subscribed: bool = False
+    subscription_codes: tuple[int, ...] | None = None
     broker: str | None = None
     device_online: bool | None = None
     event: GrainfatherEspEvent | None = None
@@ -246,6 +248,17 @@ class GrainfatherEspRuntimeStore:
             state.broker_connected = connected
             if broker is not None:
                 state.broker = broker
+
+    def set_subscription_result(
+        self,
+        chip_ids: tuple[str, ...] | list[str],
+        subscribed: bool,
+        codes: tuple[int, ...] | None = None,
+    ) -> None:
+        for chip_id in chip_ids:
+            state = self.ensure(chip_id)
+            state.mqtt_subscribed = subscribed
+            state.subscription_codes = codes
 
     def set_connection_error(
         self,
