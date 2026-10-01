@@ -61,6 +61,7 @@ from .const import (
     normalize_brew_session_status,
 )
 from .coordinator import GrainfatherDataUpdateCoordinator
+from .esp_mqtt import GrainfatherEspMqttSubscriber
 from .api import brew_session_unique_fragment
 
 PLATFORMS: list[Platform] = [
@@ -190,6 +191,21 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     _async_register_services(hass)
     await _async_create_helpers(hass, entry)
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+
+    account = coordinator.data.account
+    chip_ids = tuple(
+        device.esp_chip_id
+        for device in coordinator.data.fermentation_devices
+        if device.esp_chip_id
+    )
+    if account and account.user_id and chip_ids:
+        coordinator.esp_mqtt_subscriber = GrainfatherEspMqttSubscriber(
+            user_id=account.user_id,
+            chip_ids=chip_ids,
+            runtime_store=coordinator.esp_runtime,
+            on_update=coordinator.async_update_listeners,
+        )
+        coordinator.esp_mqtt_subscriber.start()
 
     entry.async_on_unload(entry.add_update_listener(_async_options_updated))
     return True
@@ -352,6 +368,11 @@ async def _async_remove_orphan_grainfather_devices(
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    coordinator = hass.data.get(DOMAIN, {}).get(entry.entry_id)
+    if coordinator and coordinator.esp_mqtt_subscriber is not None:
+        await coordinator.esp_mqtt_subscriber.async_stop()
+        coordinator.esp_mqtt_subscriber = None
+
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if unload_ok:
         hass.data[DOMAIN].pop(entry.entry_id, None)
