@@ -85,6 +85,7 @@ def _without_completed_sessions(snapshot: GrainfatherSnapshot) -> GrainfatherSna
         account=snapshot.account,
         brew_sessions=filtered_sessions,
         fermentation_devices=snapshot.fermentation_devices,
+        accessory_devices=snapshot.accessory_devices,
         fermentation_history_by_device_id=snapshot.fermentation_history_by_device_id,
         brew_session_history_by_batch_id=filtered_history_by_batch_id,
     )
