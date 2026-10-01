@@ -1,5 +1,11 @@
 # Home Assistant Grainfather Integration
 
+> [!IMPORTANT]
+> This branch is the BrewAssistant-oriented Grainfather variant.
+> Development branch: `brewassistant-grainfather`.
+> The fork's `main` remains upstream-tracking.
+> See [BREWASSISTANT_CHANGES.md](BREWASSISTANT_CHANGES.md) for scope, safety boundaries and development phases.
+
 Custom Home Assistant integration for Grainfather cloud data, including brew sessions, fermentation devices, recipe images, and session controls.
 
 ## Support
@@ -13,7 +19,7 @@ If this project helps your brewing workflow, you can support development here:
 - Config flow with Grainfather email and password
 - Brew session entities with batch, gravity, style, recipe image, and batch variant data
 - Brew session attributes including `condition_date`, `fermentation_start_date`, and `created_at`
-- Fermentation device temperature and gravity sensors
+- Fermentation device temperature, target temperature and gravity sensors
 - History data exposed on brew session attributes
 - Service actions for changing brew session status and fermentation steps
 - Button and select helpers for common brew session actions
