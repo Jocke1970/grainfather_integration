@@ -33,10 +33,12 @@ jobs:
         run: python -m pip install -e ".[dev]"
 
       - name: Compile Python
-        run: python -m compileall custom_components/grainfather tests
-
-      - name: Ruff
-        run: python -m ruff check custom_components tests
+        run: python -m compileall custom_components/grainfather tests tools
 
       - name: Pytest
         run: python -m pytest -q
+
+      - name: Ruff new BrewAssistant tools
+        # Upstream currently contains pre-existing Ruff debt. Keep this branch
+        # from adding lint debt without rewriting unrelated upstream files.
+        run: python -m ruff check tools/probe_particle_readonly.py
