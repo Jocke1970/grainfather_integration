@@ -112,6 +112,14 @@ class GrainfatherEspMqttSubscriber:
                 except asyncio.CancelledError:
                     raise
                 except Exception as err:  # noqa: BLE001 - transport fallback boundary
+                    error = (
+                        f"{endpoint.label}: {type(err).__name__}: {err}"
+                    )
+                    self._runtime_store.set_connection_error(
+                        list(self._chip_ids),
+                        error,
+                    )
+                    self._on_update()
                     _LOGGER.debug(
                         "Grainfather ESP MQTT subscribe-only connection failed "
                         "via %s: %s",
@@ -119,7 +127,7 @@ class GrainfatherEspMqttSubscriber:
                         err,
                     )
                 finally:
-                    self._set_broker_connected(False, broker=endpoint.label)
+                    self._set_broker_connected(False)
 
             try:
                 await asyncio.wait_for(
@@ -164,6 +172,10 @@ class GrainfatherEspMqttSubscriber:
             writer.write(_build_subscribe_packet(1, topics))
             await writer.drain()
 
+            self._runtime_store.set_connection_error(
+                list(self._chip_ids),
+                None,
+            )
             self._set_broker_connected(True, broker=endpoint.label)
             _LOGGER.info(
                 "Grainfather ESP MQTT subscribe-only connected via %s for %d device(s)",
