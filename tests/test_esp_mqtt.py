@@ -6,6 +6,7 @@ from custom_components.grainfather.esp_mqtt import (
     _build_subscribe_packet,
     _encode_remaining_length,
     _parse_publish_packet,
+    _parse_suback_packet,
 )
 from custom_components.grainfather.esp_runtime import (
     PRIMARY_MQTT_BROKER,
@@ -85,3 +86,21 @@ def test_parse_qos_one_publish_packet() -> None:
     assert payload == b'{"data":{"temp":20.1}}'
     assert qos == 1
     assert packet_id == 0x1234
+
+
+def test_parse_suback_packet() -> None:
+    packet_id, codes = _parse_suback_packet(
+        bytes([0x00, 0x01, 0x00, 0x00, 0x00, 0x00])
+    )
+
+    assert packet_id == 1
+    assert codes == (0, 0, 0, 0)
+
+
+def test_parse_suback_packet_accepts_rejection_code() -> None:
+    packet_id, codes = _parse_suback_packet(
+        bytes([0x00, 0x01, 0x00, 0x80])
+    )
+
+    assert packet_id == 1
+    assert codes == (0, 0x80)
