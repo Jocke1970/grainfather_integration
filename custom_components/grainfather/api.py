@@ -85,6 +85,20 @@ class GrainfatherFermentationDevice:
     last_specific_gravity: float | None
     last_temperature: float | None
     is_controller_linked: bool | None
+    esp_chip_id: str | None
+    particle_device_id: str | None
+    raw_payload: dict[str, Any]
+
+
+@dataclass(slots=True)
+class GrainfatherAccessoryDevice:
+    """Controller/accessory metadata discovered through the Grainfather REST API."""
+
+    accessory_id: int | None
+    chip_id: str | None
+    name: str | None
+    device_type_id: int | None
+    is_particle_chip: bool | None
     raw_payload: dict[str, Any]
 
 
@@ -104,6 +118,7 @@ class GrainfatherSnapshot:
     account: GrainfatherAccount
     brew_sessions: tuple[GrainfatherBrewSession, ...]
     fermentation_devices: tuple[GrainfatherFermentationDevice, ...]
+    accessory_devices: tuple[GrainfatherAccessoryDevice, ...] = field(default_factory=tuple)
     fermentation_history_by_device_id: dict[int, tuple[GrainfatherHistoryPoint, ...]] = field(
         default_factory=dict
     )
@@ -185,6 +200,14 @@ class GrainfatherApiClient:
             await self._request_json("GET", "/equipment/fermentation-devices")
         )
 
+        # Accessory discovery is an optional capability layer. The stable REST/history
+        # snapshot must keep working even if Grainfather changes or temporarily disables
+        # the accessory endpoint used by the current ESP/MQTT application runtime.
+        try:
+            accessory_devices = await self.async_get_accessory_devices()
+        except GrainfatherApiError:
+            accessory_devices = tuple()
+
         history_from_date = (datetime.now(timezone.utc) - timedelta(days=90)).strftime("%Y-%m-%d")
         history_by_device_id: dict[int, list[GrainfatherHistoryPoint]] = {}
         history_by_batch_id: dict[int, list[GrainfatherHistoryPoint]] = {}
@@ -228,6 +251,7 @@ class GrainfatherApiClient:
             account=self._account or GrainfatherAccount(None, self._email, None, None),
             brew_sessions=tuple(brew_sessions),
             fermentation_devices=fermentation_devices,
+            accessory_devices=accessory_devices,
             fermentation_history_by_device_id=frozen_history_by_device_id,
             brew_session_history_by_batch_id=frozen_history_by_batch_id,
         )
@@ -345,6 +369,15 @@ class GrainfatherApiClient:
         )
         return parse_batch_payload(result)
 
+    async def async_get_accessory_devices(self) -> tuple[GrainfatherAccessoryDevice, ...]:
+        """Return controller/accessory metadata used by the current Grainfather app runtime."""
+        payload = await self._request_json(
+            "GET",
+            "/accessory-devices",
+            include_api_token_query=True,
+        )
+        return parse_accessory_devices_payload(payload)
+
     async def async_get_fermentation_device_history(
         self,
         device_id: int,
@@ -372,6 +405,7 @@ class GrainfatherApiClient:
         json_payload: dict[str, Any] | None = None,
         query_params: dict[str, Any] | None = None,
         retry_on_auth_error: bool = True,
+        include_api_token_query: bool = False,
     ) -> Any:
         if self._access_token is None:
             await self.authenticate()
@@ -384,9 +418,12 @@ class GrainfatherApiClient:
         params: dict[str, Any] | None = None
         if method.upper() == "GET":
             # Add a cache-buster to reduce stale responses from intermediate proxies/CDNs.
+            effective_query_params = dict(query_params or {})
+            if include_api_token_query:
+                effective_query_params["api_token"] = self._access_token
             params = {
                 "_ts": int(datetime.now(timezone.utc).timestamp()),
-                **(query_params or {}),
+                **effective_query_params,
             }
 
         try:
@@ -406,6 +443,7 @@ class GrainfatherApiClient:
                         json_payload=json_payload,
                         query_params=query_params,
                         retry_on_auth_error=False,
+                        include_api_token_query=include_api_token_query,
                     )
 
                 if response.status in (401, 403):
@@ -578,8 +616,42 @@ def parse_fermentation_device_payload(payload: dict[str, Any]) -> GrainfatherFer
         last_specific_gravity=_to_float(_first_value(payload, "last_sg")),
         last_temperature=_to_float(_first_value(payload, "last_temperature")),
         is_controller_linked=_to_bool(_first_value(payload, "is_controller_linked")),
+        esp_chip_id=_to_str(_first_value(payload, "esp_chip_id", "espChipId")),
+        particle_device_id=_to_str(
+            _first_value(payload, "particle_device_id", "particleDeviceId")
+        ),
         raw_payload=deepcopy(payload),
     )
+
+
+def parse_accessory_devices_payload(payload: Any) -> tuple[GrainfatherAccessoryDevice, ...]:
+    """Normalize the accessory-device index used to discover ESP controller chip IDs."""
+    if isinstance(payload, dict):
+        payload = payload.get("data") or payload.get("devices") or []
+
+    if not isinstance(payload, list):
+        return tuple()
+
+    devices: list[GrainfatherAccessoryDevice] = []
+    for item in payload:
+        if not isinstance(item, dict):
+            continue
+        devices.append(
+            GrainfatherAccessoryDevice(
+                accessory_id=_to_int(_first_value(item, "id")),
+                chip_id=_to_str(_first_value(item, "chip_id", "chipId")),
+                name=_to_str(_first_value(item, "name")),
+                device_type_id=_to_int(
+                    _first_value(item, "device_type_id", "deviceTypeId")
+                ),
+                is_particle_chip=_to_bool(
+                    _first_value(item, "is_particle_chip", "isParticleChip")
+                ),
+                raw_payload=deepcopy(item),
+            )
+        )
+
+    return tuple(devices)
 
 
 def parse_fermentation_device_history_payload(payload: Any) -> list[dict[str, Any]]:
@@ -765,6 +837,12 @@ def _to_float(value: Any) -> float | None:
         return float(value)
     except (TypeError, ValueError):
         return None
+
+
+def _to_str(value: Any) -> str | None:
+    if value is None:
+        return None
+    return str(value)
 
 
 def _to_int(value: Any) -> int | None:
