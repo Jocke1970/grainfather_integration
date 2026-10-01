@@ -4,21 +4,31 @@ on:
   push:
     branches:
       - brewassistant-grainfather
+  pull_request:
+    branches:
+      - brewassistant-grainfather
+    types:
+      - opened
+      - synchronize
 
 permissions:
   contents: write
 
 jobs:
   release:
-    if: contains(github.event.head_commit.message, '[release ba]')
+    if: >-
+      (github.event_name == 'push' && contains(github.event.head_commit.message, '[release ba]')) ||
+      (github.event_name == 'pull_request' && startsWith(github.event.pull_request.title, '[release ba]'))
     runs-on: ubuntu-latest
     env:
       TAG: v0.1.5-ba.1
       RELEASE_TITLE: BrewAssistant Grainfather v0.1.5-ba.1
+      TARGET_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.sha }}
     steps:
-      - name: Checkout
+      - name: Checkout release target
         uses: actions/checkout@v4
         with:
+          ref: ${{ env.TARGET_SHA }}
           fetch-depth: 0
 
       - name: Create tag if missing
@@ -30,7 +40,7 @@ jobs:
           else
             git config user.name "github-actions[bot]"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git tag -a "$TAG" "$GITHUB_SHA" -m "$RELEASE_TITLE"
+            git tag -a "$TAG" "$TARGET_SHA" -m "$RELEASE_TITLE"
             git push origin "$TAG"
           fi
 
@@ -61,6 +71,6 @@ jobs:
           EOF
 
           gh release create "$TAG" \
-            --target "$GITHUB_SHA" \
+            --target "$TARGET_SHA" \
             --title "$RELEASE_TITLE" \
             --notes-file /tmp/release-notes.md
