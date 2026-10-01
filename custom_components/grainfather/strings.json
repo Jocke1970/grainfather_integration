@@ -83,6 +83,9 @@
       "fermdevice_temperature": {
         "name": "Temperature"
       },
+      "fermdevice_target_temperature": {
+        "name": "Target Temperature"
+      },
       "fermdevice_gravity": {
         "name": "Gravity"
       }
