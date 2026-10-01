@@ -43,6 +43,7 @@ class GrainfatherDataUpdateCoordinator(DataUpdateCoordinator[GrainfatherSnapshot
         self.api = api
         self.entry = entry
         self.esp_runtime = GrainfatherEspRuntimeStore()
+        self.esp_mqtt_subscriber = None
 
     async def _async_update_data(self) -> GrainfatherSnapshot:
         try:
