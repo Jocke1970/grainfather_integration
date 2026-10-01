@@ -4,6 +4,7 @@ from custom_components.grainfather.esp_mqtt import (
     DEFAULT_MQTT_ENDPOINTS,
     _build_connect_packet,
     _build_subscribe_packet,
+    _build_telemetry_keepalive_packet,
     _encode_remaining_length,
     _parse_publish_packet,
     _parse_suback_packet,
@@ -104,3 +105,11 @@ def test_parse_suback_packet_accepts_rejection_code() -> None:
 
     assert packet_id == 1
     assert codes == (0, 0x80)
+
+
+def test_build_telemetry_keepalive_packet_is_qos_zero_command_23_only() -> None:
+    packet = _build_telemetry_keepalive_packet("abc123", 120)
+
+    assert packet[0] == 0x30
+    assert b"devices/abc123/command" in packet
+    assert b'{"command":23,"value":"120"}' in packet
