@@ -9,11 +9,16 @@ from contextlib import suppress
 from dataclasses import dataclass
 
 from .esp_runtime import (
+    ESP_INITIAL_SUBSCRIPTION_SECONDS,
+    ESP_REFRESH_SUBSCRIPTION_SECONDS,
     PRIMARY_MQTT_BROKER,
     SECONDARY_MQTT_BROKER,
     GrainfatherEspRuntimeStore,
+    command_topic,
     mqtt_credentials,
+    parse_device_topic,
     subscription_topics,
+    telemetry_keepalive_payload,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -47,11 +52,11 @@ DEFAULT_MQTT_ENDPOINTS: tuple[GrainfatherMqttEndpoint, ...] = (
 
 
 class GrainfatherEspMqttSubscriber:
-    """Minimal subscribe-only MQTT 3.1.1 client for Grainfather ESP devices.
+    """MQTT 3.1.1 telemetry client for Grainfather ESP devices.
 
-    This class intentionally has no MQTT PUBLISH implementation. It only sends
-    protocol control packets required to connect, subscribe, keep the connection
-    alive and acknowledge inbound QoS 1 messages.
+    Outbound MQTT is structurally limited to command 23 (ESP subscription time),
+    which mirrors the Grainfather app's telemetry activation/refresh handshake.
+    There is no generic command publisher and no target/mode/control write path.
     """
 
     def __init__(
@@ -260,19 +265,56 @@ class GrainfatherEspMqttSubscriber:
 
         topic, payload, qos, packet_id = _parse_publish_packet(flags, body)
         try:
-            self._runtime_store.ingest(topic, payload)
+            state = self._runtime_store.ingest(topic, payload)
         except (ValueError, TypeError) as err:
             _LOGGER.debug(
                 "Ignoring unsupported Grainfather ESP MQTT payload on %s: %s",
                 topic,
                 err,
             )
-        else:
-            self._on_update()
+            return
+
+        self._on_update()
 
         if qos == 1 and packet_id is not None:
             writer.write(b"\x40\x02" + packet_id.to_bytes(2, "big"))  # PUBACK.
             await writer.drain()
+
+        chip_id, topic_type = parse_device_topic(topic)
+        if topic_type == "status" and state.device_online is True:
+            await self._send_telemetry_keepalive(
+                writer,
+                chip_id,
+                ESP_INITIAL_SUBSCRIPTION_SECONDS,
+            )
+        elif (
+            topic_type == "events"
+            and state.event is not None
+            and state.event.subscription_time is not None
+            and state.event.subscription_time < 25
+        ):
+            await self._send_telemetry_keepalive(
+                writer,
+                chip_id,
+                ESP_REFRESH_SUBSCRIPTION_SECONDS,
+            )
+
+    async def _send_telemetry_keepalive(
+        self,
+        writer: asyncio.StreamWriter,
+        chip_id: str,
+        seconds: int,
+    ) -> None:
+        packet = _build_telemetry_keepalive_packet(chip_id, seconds)
+        writer.write(packet)
+        await writer.drain()
+        self._runtime_store.mark_telemetry_keepalive(chip_id, seconds)
+        self._on_update()
+        _LOGGER.debug(
+            "Refreshed Grainfather ESP telemetry subscription for %s to %ss",
+            chip_id,
+            seconds,
+        )
 
     def _set_broker_connected(
         self,
@@ -324,6 +366,14 @@ def _build_connect_packet(
     )
     remaining = protocol + payload
     return b"\x10" + _encode_remaining_length(len(remaining)) + remaining
+
+
+def _build_telemetry_keepalive_packet(chip_id: str, seconds: int) -> bytes:
+    """Build the only allowed controller-bound MQTT PUBLISH packet."""
+    topic = command_topic(chip_id)
+    payload = telemetry_keepalive_payload(seconds).encode()
+    body = _encode_utf8(topic) + payload
+    return b"\x30" + _encode_remaining_length(len(body)) + body
 
 
 def _build_subscribe_packet(packet_id: int, topics: tuple[str, ...]) -> bytes:
