@@ -12,6 +12,9 @@ SECONDARY_MQTT_BROKER = "mqtt2.grainfather.com"
 # The current Grainfather app subscribes to these suffixes for every ESP accessory.
 # "#" includes events/profiles; the explicit retained topics mirror the app runtime.
 MQTT_SUBSCRIPTION_SUFFIXES = ("#", "meta", "status", "config")
+ESP_SUBSCRIPTION_TIME_COMMAND = 23
+ESP_INITIAL_SUBSCRIPTION_SECONDS = 15
+ESP_REFRESH_SUBSCRIPTION_SECONDS = 120
 
 
 def mqtt_username(user_id: str | int) -> str:
@@ -48,6 +51,7 @@ class GrainfatherEspEvent:
     heating: bool | None
     cooling: bool | None
     rssi: float | None
+    subscription_time: int | None
     control_mode: int | None
     control_active: bool | None
     units: int | None
@@ -90,6 +94,27 @@ def subscription_topics(chip_id: str) -> tuple[str, ...]:
     return tuple(f"{prefix}{suffix}" for suffix in MQTT_SUBSCRIPTION_SUFFIXES)
 
 
+def telemetry_keepalive_payload(seconds: int) -> str:
+    """Build the only controller-bound payload allowed by live telemetry."""
+    if seconds not in {
+        ESP_INITIAL_SUBSCRIPTION_SECONDS,
+        ESP_REFRESH_SUBSCRIPTION_SECONDS,
+    }:
+        raise ValueError("Unsupported Grainfather telemetry subscription time")
+    return json.dumps(
+        {
+            "command": ESP_SUBSCRIPTION_TIME_COMMAND,
+            "value": str(seconds),
+        },
+        separators=(",", ":"),
+    )
+
+
+def command_topic(chip_id: str) -> str:
+    """Return the Grainfather controller command topic for one ESP accessory."""
+    return f"{device_topic(chip_id)}command"
+
+
 def parse_status_payload(payload: str | bytes) -> bool:
     """Parse Grainfather's JSON MQTT status payload."""
     value = json.loads(_decode_payload(payload))
@@ -109,6 +134,7 @@ def parse_event_payload(payload: str | bytes) -> GrainfatherEspEvent:
         heating=_to_bool_or_none(reading.get("heatStatus")),
         cooling=_to_bool_or_none(reading.get("coolStatus")),
         rssi=_to_float(reading.get("rssi")),
+        subscription_time=_to_int(reading.get("subTime")),
         control_mode=_to_int(settings.get("controlMode")),
         control_active=_to_bool_or_none(settings.get("controlStatus")),
         units=_to_int(settings.get("units")),
@@ -213,6 +239,9 @@ class GrainfatherEspLiveState:
     last_topic: str | None = None
     last_message_at: datetime | None = None
     last_connection_error: str | None = None
+    telemetry_keepalive_last_sent_at: datetime | None = None
+    telemetry_keepalive_seconds: int | None = None
+    telemetry_keepalive_count: int = 0
 
 
 @dataclass(slots=True)
@@ -268,6 +297,18 @@ class GrainfatherEspRuntimeStore:
     ) -> None:
         for chip_id in chip_ids:
             self.ensure(chip_id).last_connection_error = error
+
+    def mark_telemetry_keepalive(
+        self,
+        chip_id: str,
+        seconds: int,
+        *,
+        sent_at: datetime | None = None,
+    ) -> None:
+        state = self.ensure(chip_id)
+        state.telemetry_keepalive_last_sent_at = sent_at or datetime.now(UTC)
+        state.telemetry_keepalive_seconds = seconds
+        state.telemetry_keepalive_count += 1
 
     def ingest(
         self,
