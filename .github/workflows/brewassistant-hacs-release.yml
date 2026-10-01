@@ -1,0 +1,66 @@
+name: BrewAssistant HACS test release
+
+on:
+  push:
+    branches:
+      - brewassistant-grainfather
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    if: contains(github.event.head_commit.message, '[release ba]')
+    runs-on: ubuntu-latest
+    env:
+      TAG: v0.1.5-ba.1
+      RELEASE_TITLE: BrewAssistant Grainfather v0.1.5-ba.1
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Create tag if missing
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null 2>&1; then
+            echo "Tag $TAG already exists."
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git tag -a "$TAG" "$GITHUB_SHA" -m "$RELEASE_TITLE"
+            git push origin "$TAG"
+          fi
+
+      - name: Create GitHub release if missing
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG already exists."
+            exit 0
+          fi
+
+          cat > /tmp/release-notes.md <<'EOF'
+          BrewAssistant test release from `brewassistant-grainfather`.
+
+          This release keeps the stable Grainfather REST/history path and adds the
+          first read-only groundwork for the modern ESP controller runtime:
+
+          - REST accessory-device discovery
+          - `esp_chip_id` / controller transport metadata
+          - read-only ESP event/meta/status parsers
+          - Grainfather MQTT broker/topic model
+          - no MQTT publish/controller-write implementation
+
+          This is a BrewAssistant test build, not an upstream fidley release.
+          EOF
+
+          gh release create "$TAG" \
+            --target "$GITHUB_SHA" \
+            --title "$RELEASE_TITLE" \
+            --notes-file /tmp/release-notes.md
