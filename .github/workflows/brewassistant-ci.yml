@@ -1,0 +1,42 @@
+name: BrewAssistant CI
+
+on:
+  push:
+    branches:
+      - brewassistant-grainfather
+  pull_request:
+    branches:
+      - brewassistant-grainfather
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.13"]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: Install development dependencies
+        run: python -m pip install -e ".[dev]"
+
+      - name: Compile Python
+        run: python -m compileall custom_components/grainfather tests
+
+      - name: Ruff
+        run: python -m ruff check custom_components tests
+
+      - name: Pytest
+        run: python -m pytest -q
