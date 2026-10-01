@@ -327,6 +327,7 @@ def test_parse_fermentation_device_history_points() -> None:
         {
             "timestamp": "2026-04-09T10:00:00Z",
             "temperature": "20.1",
+            "target_temperature": "19.0",
             "last_sg": "1.011",
             "brew_session_id": 1378631,
         },
@@ -344,7 +345,38 @@ def test_parse_fermentation_device_history_points() -> None:
     assert points[0].device_id == 69884
     assert points[0].brew_session_id == 1378631
     assert points[0].temperature == 20.1
+    assert points[0].target_temperature == 19.0
     assert points[0].specific_gravity == 1.011
+
+
+def test_parse_fermentation_device_history_points_keeps_target_only_point() -> None:
+    payload = [
+        {
+            "timestamp": "2026-10-01T07:23:00Z",
+            "temperature": None,
+            "target_temperature": "22",
+            "last_sg": None,
+        }
+    ]
+
+    points = parse_fermentation_device_history_points(payload, 92245)
+
+    assert len(points) == 1
+    assert points[0].device_id == 92245
+    assert points[0].temperature is None
+    assert points[0].target_temperature == 22.0
+    assert points[0].specific_gravity is None
+
+
+def test_parse_fermentation_device_history_points_accepts_target_temperature_aliases() -> None:
+    payload = [
+        {"timestamp": "2026-10-01T07:24:00Z", "targetTemperature": "21.5"},
+        {"timestamp": "2026-10-01T07:25:00Z", "targetTemp": "20.0"},
+    ]
+
+    points = parse_fermentation_device_history_points(payload, 92245)
+
+    assert [point.target_temperature for point in points] == [21.5, 20.0]
 
 
 def test_async_get_fermentation_device_history_uses_expected_query_params() -> None:
