@@ -44,6 +44,8 @@ jobs:
         run: >-
           python -m ruff check
           custom_components/grainfather/esp_runtime.py
+          custom_components/grainfather/esp_mqtt.py
           tools/probe_particle_readonly.py
           tools/probe_esp_accessory_readonly.py
           tests/test_esp_runtime.py
+          tests/test_esp_mqtt.py
