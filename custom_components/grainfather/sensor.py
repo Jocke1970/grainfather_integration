@@ -254,6 +254,17 @@ def _controller_runtime_metadata(
             "live_mqtt_last_error": (
                 live.last_connection_error if live else None
             ),
+            "live_mqtt_telemetry_keepalive_last_sent_at": (
+                live.telemetry_keepalive_last_sent_at.isoformat()
+                if live and live.telemetry_keepalive_last_sent_at
+                else None
+            ),
+            "live_mqtt_telemetry_keepalive_seconds": (
+                live.telemetry_keepalive_seconds if live else None
+            ),
+            "live_mqtt_telemetry_keepalive_count": (
+                live.telemetry_keepalive_count if live else 0
+            ),
             "live_temperature": event.temperature if event else None,
             "live_target_temperature": event.target_temperature if event else None,
             "heating": event.heating if event else None,
