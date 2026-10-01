@@ -5,7 +5,12 @@ import pytest
 from custom_components.grainfather.esp_runtime import (
     PRIMARY_MQTT_BROKER,
     SECONDARY_MQTT_BROKER,
+    GrainfatherEspRuntimeStore,
     device_topic,
+    mqtt_credentials,
+    mqtt_password,
+    mqtt_username,
+    parse_device_topic,
     parse_event_payload,
     parse_meta_payload,
     parse_status_payload,
@@ -127,3 +132,69 @@ def test_parse_meta_payload() -> None:
 def test_event_parser_rejects_non_object_json() -> None:
     with pytest.raises(ValueError):
         parse_event_payload("[]")
+
+
+def test_mqtt_credentials_match_current_app_md5_derivation() -> None:
+    assert mqtt_username("12345") == "12345"
+    assert mqtt_password("12345") == "1285290e6e93e92ea85ce46f74cba631"
+    assert mqtt_credentials(12345) == (
+        "12345",
+        "1285290e6e93e92ea85ce46f74cba631",
+    )
+
+
+def test_mqtt_username_rejects_empty_user_id() -> None:
+    with pytest.raises(ValueError):
+        mqtt_username("   ")
+
+
+def test_parse_device_topic() -> None:
+    assert parse_device_topic("devices/ABC123/events") == ("abc123", "events")
+
+    with pytest.raises(ValueError):
+        parse_device_topic("wrong/ABC123/events")
+
+
+def test_runtime_store_ingests_read_only_topics() -> None:
+    store = GrainfatherEspRuntimeStore()
+    chip_id = "ABC123"
+    store.set_broker_connected([chip_id], True, broker=PRIMARY_MQTT_BROKER)
+
+    state = store.ingest(
+        "devices/ABC123/events",
+        json.dumps(
+            {
+                "data": {
+                    "temp": 19.2,
+                    "target": 18,
+                    "heatStatus": True,
+                    "coolStatus": False,
+                    "rssi": -48,
+                },
+                "settings": {"controlMode": 3, "controlStatus": True},
+            }
+        ),
+    )
+    store.ingest(
+        "devices/ABC123/meta",
+        json.dumps({"version": "1.2.3", "errorCode": 0}),
+    )
+    store.ingest("devices/ABC123/status", "true")
+    store.ingest("devices/ABC123/config", json.dumps({"example": 1}))
+    store.ingest("devices/ABC123/profiles", json.dumps([{"id": 1}]))
+
+    assert state is store.get("abc123")
+    assert state.broker_connected is True
+    assert state.broker == PRIMARY_MQTT_BROKER
+    assert state.device_online is True
+    assert state.event is not None
+    assert state.event.temperature == 19.2
+    assert state.event.target_temperature == 18.0
+    assert state.event.heating is True
+    assert state.event.cooling is False
+    assert state.event.control_mode == 3
+    assert state.meta is not None
+    assert state.meta.firmware_version == "1.2.3"
+    assert state.config == {"example": 1}
+    assert state.profiles == [{"id": 1}]
+    assert state.last_message_at is not None
