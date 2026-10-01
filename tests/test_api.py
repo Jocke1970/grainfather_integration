@@ -10,6 +10,7 @@ from custom_components.grainfather.api import (
     brew_session_display_name,
     brew_session_unique_fragment,
     parse_account_payload,
+    parse_accessory_devices_payload,
     parse_batch_payload,
     parse_fermentation_device_history_payload,
     parse_fermentation_device_history_points,
@@ -179,6 +180,100 @@ def test_parse_fermentation_devices_payload() -> None:
     assert devices[0].linked_brew_session_name == "Orange IPA #271"
     assert devices[0].last_specific_gravity == 1.0122
     assert devices[0].last_temperature == 5.81
+
+
+def test_parse_fermentation_device_payload_reads_controller_ids() -> None:
+    payload = [
+        {
+            "id": 92245,
+            "name": "Grainfather GF30",
+            "fermentation_device_type_id": 30,
+            "is_controller_linked": True,
+            "esp_chip_id": "36002c000347383531363136",
+            "particle_device_id": None,
+        }
+    ]
+
+    devices = parse_fermentation_devices_payload(payload)
+
+    assert len(devices) == 1
+    assert devices[0].esp_chip_id == "36002c000347383531363136"
+    assert devices[0].particle_device_id is None
+
+
+def test_parse_accessory_devices_payload() -> None:
+    payload = [
+        {
+            "id": 123,
+            "chip_id": "36002c000347383531363136",
+            "name": "GF30 Controller",
+            "device_type_id": 30,
+            "is_particle_chip": False,
+        }
+    ]
+
+    devices = parse_accessory_devices_payload(payload)
+
+    assert len(devices) == 1
+    assert devices[0].accessory_id == 123
+    assert devices[0].chip_id == "36002c000347383531363136"
+    assert devices[0].name == "GF30 Controller"
+    assert devices[0].device_type_id == 30
+    assert devices[0].is_particle_chip is False
+
+
+def test_async_get_accessory_devices_uses_current_api_token_query() -> None:
+    class FakeGrainfatherApiClient(GrainfatherApiClient):
+        def __init__(self) -> None:
+            self._session = None
+            self._email = ""
+            self._password = ""
+            self._base_url = "https://community.grainfather.com/api"
+            self._access_token = "current-token"
+            self._account = None
+            self.calls: list[dict[str, Any]] = []
+
+        async def _request_json(
+            self,
+            method: str,
+            path: str,
+            *,
+            json_payload=None,
+            query_params=None,
+            retry_on_auth_error: bool = True,
+        ):
+            del json_payload
+            self.calls.append(
+                {
+                    "method": method,
+                    "path": path,
+                    "query_params": query_params,
+                    "retry_on_auth_error": retry_on_auth_error,
+                }
+            )
+            return [
+                {
+                    "id": 123,
+                    "chip_id": "abc123",
+                    "name": "Controller",
+                    "device_type_id": 30,
+                }
+            ]
+
+    client = FakeGrainfatherApiClient()
+
+    devices = asyncio.run(client.async_get_accessory_devices())
+
+    assert len(devices) == 1
+    assert devices[0].chip_id == "abc123"
+    assert client.calls == [
+        {
+            "method": "GET",
+            "path": "/accessory-devices",
+            "query_params": {"api_token": "current-token"},
+            "retry_on_auth_error": False,
+        }
+    ]
 
 
 def test_build_brew_session_update_payload_updates_status_and_steps() -> None:
