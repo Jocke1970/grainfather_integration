@@ -182,10 +182,20 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     await _async_prune_stale_registry_entries(hass, entry, coordinator)
 
-    def _async_handle_coordinator_update() -> None:
-        hass.async_create_task(_async_prune_stale_registry_entries(hass, entry, coordinator))
+    last_pruned_snapshot = coordinator.data
 
-    entry.async_on_unload(coordinator.async_add_listener(_async_handle_coordinator_update))
+    def _async_handle_coordinator_update() -> None:
+        nonlocal last_pruned_snapshot
+        if coordinator.data is last_pruned_snapshot:
+            return
+        last_pruned_snapshot = coordinator.data
+        hass.async_create_task(
+            _async_prune_stale_registry_entries(hass, entry, coordinator)
+        )
+
+    entry.async_on_unload(
+        coordinator.async_add_listener(_async_handle_coordinator_update)
+    )
 
     hass.data[DOMAIN][entry.entry_id] = coordinator
     _async_register_services(hass)
