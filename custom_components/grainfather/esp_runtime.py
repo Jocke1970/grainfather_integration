@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from datetime import datetime, timezone
 import hashlib
 import json
+from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from typing import Any
 
 PRIMARY_MQTT_BROKER = "mqtt.grainfather.com"
@@ -30,7 +30,7 @@ def mqtt_password(user_id: str | int) -> str:
     hexadecimal, matching hashlib.hexdigest().
     """
     username = mqtt_username(user_id)
-    return hashlib.md5(f"{username}BEVIE".encode("utf-8")).hexdigest()
+    return hashlib.md5(f"{username}BEVIE".encode()).hexdigest()
 
 
 def mqtt_credentials(user_id: str | int) -> tuple[str, str]:
@@ -97,7 +97,7 @@ def parse_status_payload(payload: str | bytes) -> bool:
 
 
 def parse_event_payload(payload: str | bytes) -> GrainfatherEspEvent:
-    """Parse the modern GF30/WFC events payload without issuing any controller command."""
+    """Parse modern GF30/WFC events without issuing any controller command."""
     data = _json_object(payload)
     reading = data.get("data") if isinstance(data.get("data"), dict) else {}
     settings = data.get("settings") if isinstance(data.get("settings"), dict) else {}
@@ -195,6 +195,7 @@ def _to_bool_or_none(value: Any) -> bool | None:
             return False
     return bool(value)
 
+
 @dataclass(slots=True)
 class GrainfatherEspLiveState:
     """Mutable read-only cache for one ESP accessory's observed MQTT state."""
@@ -255,7 +256,7 @@ class GrainfatherEspRuntimeStore:
         chip_id, topic_type = parse_device_topic(topic)
         state = self.ensure(chip_id)
         state.last_topic = topic
-        state.last_message_at = received_at or datetime.now(timezone.utc)
+        state.last_message_at = received_at or datetime.now(UTC)
 
         if topic_type == "status":
             state.device_online = parse_status_payload(payload)
