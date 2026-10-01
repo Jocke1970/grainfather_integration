@@ -207,9 +207,10 @@ def _get_collaborating_devices(
 
 def _controller_runtime_metadata(
     device: GrainfatherFermentationDevice,
-    snapshot: GrainfatherSnapshot,
+    coordinator: GrainfatherDataUpdateCoordinator,
 ) -> dict[str, Any]:
-    """Describe discovered controller transport without claiming a live MQTT connection."""
+    """Describe controller transport and any subscribe-only live MQTT observations."""
+    snapshot = coordinator.data
     if device.esp_chip_id:
         accessory = next(
             (
@@ -220,6 +221,9 @@ def _controller_runtime_metadata(
             ),
             None,
         )
+        live = coordinator.esp_runtime.get(device.esp_chip_id)
+        event = live.event if live else None
+        meta = live.meta if live else None
         return {
             "controller_transport": "esp_mqtt",
             "esp_chip_id": device.esp_chip_id,
@@ -228,7 +232,30 @@ def _controller_runtime_metadata(
             "accessory_device_id": accessory.accessory_id if accessory else None,
             "accessory_device_type_id": accessory.device_type_id if accessory else None,
             "accessory_device_name": accessory.name if accessory else None,
-            "live_mqtt_connected": False,
+            "live_mqtt_connected": live.broker_connected if live else False,
+            "live_mqtt_broker": live.broker if live else None,
+            "controller_online": live.device_online if live else None,
+            "live_mqtt_last_message_at": (
+                live.last_message_at.isoformat() if live and live.last_message_at else None
+            ),
+            "live_temperature": event.temperature if event else None,
+            "live_target_temperature": event.target_temperature if event else None,
+            "heating": event.heating if event else None,
+            "cooling": event.cooling if event else None,
+            "controller_rssi": event.rssi if event else (meta.rssi if meta else None),
+            "control_mode": event.control_mode if event else None,
+            "control_active": event.control_active if event else None,
+            "controller_units": event.units if event else None,
+            "controller_hysteresis": event.hysteresis if event else None,
+            "controller_temperature_offset": event.temperature_offset if event else None,
+            "session_id": event.session_id if event else None,
+            "managed_mode": event.managed_mode if event else None,
+            "session_stage": event.session_stage if event else None,
+            "stage_end_time": event.stage_end_time if event else None,
+            "firmware_version": meta.firmware_version if meta else None,
+            "controller_error_code": meta.error_code if meta else None,
+            "controller_ota_available": meta.ota_available if meta else None,
+            "controller_ota_status": meta.ota_status if meta else None,
         }
 
     if device.particle_device_id:
@@ -569,7 +596,7 @@ class GrainfatherFermDeviceTemperatureSensor(
             "linked_brew_session_id": device.linked_brew_session_id,
             "linked_brew_session_name": device.linked_brew_session_name,
             "is_controller_linked": device.is_controller_linked,
-            **_controller_runtime_metadata(device, self.coordinator.data),
+            **_controller_runtime_metadata(device, self.coordinator),
             "collaborating_devices": collaborators,
             "default_density_unit": self.coordinator.entry.options.get(
                 CONF_DEFAULT_DENSITY_UNIT,
@@ -649,7 +676,7 @@ class GrainfatherFermDeviceTargetTemperatureSensor(
             "linked_brew_session_id": device.linked_brew_session_id,
             "linked_brew_session_name": device.linked_brew_session_name,
             "is_controller_linked": device.is_controller_linked,
-            **_controller_runtime_metadata(device, self.coordinator.data),
+            **_controller_runtime_metadata(device, self.coordinator),
             "source": "fermentation_device_history",
             "history_points_count": len(history),
         }
@@ -715,7 +742,7 @@ class GrainfatherFermDeviceGravitySensor(
             "last_heard": device.last_heard,
             "linked_brew_session_id": device.linked_brew_session_id,
             "linked_brew_session_name": device.linked_brew_session_name,
-            **_controller_runtime_metadata(device, self.coordinator.data),
+            **_controller_runtime_metadata(device, self.coordinator),
             "collaborating_devices": collaborators,
             "default_density_unit": self.coordinator.entry.options.get(
                 CONF_DEFAULT_DENSITY_UNIT,
