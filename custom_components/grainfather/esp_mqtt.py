@@ -126,7 +126,7 @@ class GrainfatherEspMqttSubscriber:
                     )
                     self._on_update()
                     _LOGGER.debug(
-                        "Grainfather ESP MQTT subscribe-only connection failed "
+                        "Grainfather ESP MQTT telemetry connection failed "
                         "via %s: %s",
                         endpoint.label,
                         err,
