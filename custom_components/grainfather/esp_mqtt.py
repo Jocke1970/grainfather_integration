@@ -12,8 +12,8 @@ from .esp_runtime import (
     PRIMARY_MQTT_BROKER,
     SECONDARY_MQTT_BROKER,
     GrainfatherEspRuntimeStore,
-    device_topic,
     mqtt_credentials,
+    subscription_topics,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -127,6 +127,10 @@ class GrainfatherEspMqttSubscriber:
                         err,
                     )
                 finally:
+                    self._runtime_store.set_subscription_result(
+                        list(self._chip_ids),
+                        False,
+                    )
                     self._set_broker_connected(False)
 
             try:
@@ -168,18 +172,54 @@ class GrainfatherEspMqttSubscriber:
             if body[1] != 0:
                 raise ConnectionError(f"MQTT CONNACK rejected with code {body[1]}")
 
-            topics = tuple(f"{device_topic(chip_id)}#" for chip_id in self._chip_ids)
+            self._set_broker_connected(True, broker=endpoint.label)
+
+            topics = tuple(
+                topic
+                for chip_id in self._chip_ids
+                for topic in subscription_topics(chip_id)
+            )
             writer.write(_build_subscribe_packet(1, topics))
             await writer.drain()
 
+            packet_type, _flags, body = await asyncio.wait_for(
+                _read_packet(reader),
+                timeout=12,
+            )
+            if packet_type != 9:
+                raise ConnectionError(
+                    f"Broker did not return MQTT SUBACK; packet type {packet_type}"
+                )
+
+            packet_id, subscription_codes = _parse_suback_packet(body)
+            if packet_id != 1:
+                raise ConnectionError(
+                    f"MQTT SUBACK packet id mismatch: {packet_id}"
+                )
+            if len(subscription_codes) != len(topics):
+                raise ConnectionError(
+                    "MQTT SUBACK result count did not match subscription count"
+                )
+            if any(code == 0x80 for code in subscription_codes):
+                raise ConnectionError(
+                    f"MQTT subscription rejected: {subscription_codes}"
+                )
+
+            self._runtime_store.set_subscription_result(
+                list(self._chip_ids),
+                True,
+                subscription_codes,
+            )
             self._runtime_store.set_connection_error(
                 list(self._chip_ids),
                 None,
             )
-            self._set_broker_connected(True, broker=endpoint.label)
+            self._on_update()
             _LOGGER.info(
-                "Grainfather ESP MQTT subscribe-only connected via %s for %d device(s)",
+                "Grainfather ESP MQTT subscribed via %s to %d topic(s) "
+                "for %d device(s)",
                 endpoint.label,
+                len(topics),
                 len(self._chip_ids),
             )
 
@@ -307,6 +347,17 @@ async def _read_packet(
 
     body = await reader.readexactly(remaining_length)
     return first >> 4, first & 0x0F, body
+
+
+def _parse_suback_packet(body: bytes) -> tuple[int, tuple[int, ...]]:
+    """Parse MQTT SUBACK packet id and granted QoS/error codes."""
+    if len(body) < 3:
+        raise ValueError("Malformed MQTT SUBACK packet")
+    packet_id = int.from_bytes(body[:2], "big")
+    codes = tuple(body[2:])
+    if any(code not in {0, 1, 2, 0x80} for code in codes):
+        raise ValueError(f"Invalid MQTT SUBACK return code(s): {codes}")
+    return packet_id, codes
 
 
 def _parse_publish_packet(
