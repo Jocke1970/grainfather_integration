@@ -236,7 +236,12 @@ def _controller_runtime_metadata(
             "live_mqtt_broker": live.broker if live else None,
             "controller_online": live.device_online if live else None,
             "live_mqtt_last_message_at": (
-                live.last_message_at.isoformat() if live and live.last_message_at else None
+                live.last_message_at.isoformat()
+                if live and live.last_message_at
+                else None
+            ),
+            "live_mqtt_last_error": (
+                live.last_connection_error if live else None
             ),
             "live_temperature": event.temperature if event else None,
             "live_target_temperature": event.target_temperature if event else None,
