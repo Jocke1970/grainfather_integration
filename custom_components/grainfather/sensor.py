@@ -251,6 +251,7 @@ def _controller_runtime_metadata(
                 if live and live.last_message_at
                 else None
             ),
+            "live_mqtt_last_topic": live.last_topic if live else None,
             "live_mqtt_last_error": (
                 live.last_connection_error if live else None
             ),
@@ -267,6 +268,9 @@ def _controller_runtime_metadata(
             ),
             "live_temperature": event.temperature if event else None,
             "live_target_temperature": event.target_temperature if event else None,
+            "live_mqtt_event_subscription_time": (
+                event.subscription_time if event else None
+            ),
             "heating": event.heating if event else None,
             "cooling": event.cooling if event else None,
             "controller_rssi": event.rssi if event else (meta.rssi if meta else None),
