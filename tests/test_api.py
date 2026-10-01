@@ -368,7 +368,7 @@ def test_parse_fermentation_device_history_points_keeps_target_only_point() -> N
     assert points[0].specific_gravity is None
 
 
-def test_parse_fermentation_device_history_points_accepts_target_temperature_aliases() -> None:
+def test_parse_history_points_accepts_target_temperature_aliases() -> None:
     payload = [
         {"timestamp": "2026-10-01T07:24:00Z", "targetTemperature": "21.5"},
         {"timestamp": "2026-10-01T07:25:00Z", "targetTemp": "20.0"},
