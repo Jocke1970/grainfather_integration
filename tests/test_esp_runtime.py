@@ -186,6 +186,10 @@ def test_runtime_store_ingests_read_only_topics() -> None:
     assert state is store.get("abc123")
     assert state.broker_connected is True
     assert state.broker == PRIMARY_MQTT_BROKER
+    store.set_connection_error([chip_id], "test connection error")
+    assert state.last_connection_error == "test connection error"
+    store.set_connection_error([chip_id], None)
+    assert state.last_connection_error is None
     assert state.device_online is True
     assert state.event is not None
     assert state.event.temperature == 19.2
