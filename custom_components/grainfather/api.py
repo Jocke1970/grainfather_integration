@@ -85,9 +85,9 @@ class GrainfatherFermentationDevice:
     last_specific_gravity: float | None
     last_temperature: float | None
     is_controller_linked: bool | None
-    esp_chip_id: str | None
-    particle_device_id: str | None
     raw_payload: dict[str, Any]
+    esp_chip_id: str | None = None
+    particle_device_id: str | None = None
 
 
 @dataclass(slots=True)
