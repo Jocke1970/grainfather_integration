@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from datetime import datetime, timezone
+import hashlib
 import json
 from typing import Any
 
@@ -10,6 +12,31 @@ SECONDARY_MQTT_BROKER = "mqtt2.grainfather.com"
 # The current Grainfather app subscribes to these suffixes for every ESP accessory.
 # "#" includes events/profiles; the explicit retained topics mirror the app runtime.
 MQTT_SUBSCRIPTION_SUFFIXES = ("#", "meta", "status", "config")
+
+
+def mqtt_username(user_id: str | int) -> str:
+    """Return the Grainfather MQTT username used by the current mobile app."""
+    value = str(user_id).strip()
+    if not value:
+        raise ValueError("user_id must not be empty")
+    return value
+
+
+def mqtt_password(user_id: str | int) -> str:
+    """Derive the Grainfather MQTT password exactly as the current app does.
+
+    The app imports webpack module 2517, which maps to CryptoJS MD5, and calls
+    MD5("<user_id>BEVIE"). Stringifying the CryptoJS WordArray yields lowercase
+    hexadecimal, matching hashlib.hexdigest().
+    """
+    username = mqtt_username(user_id)
+    return hashlib.md5(f"{username}BEVIE".encode("utf-8")).hexdigest()
+
+
+def mqtt_credentials(user_id: str | int) -> tuple[str, str]:
+    """Return the current app-compatible MQTT username/password pair."""
+    username = mqtt_username(user_id)
+    return username, mqtt_password(username)
 
 
 @dataclass(frozen=True, slots=True)
@@ -167,3 +194,87 @@ def _to_bool_or_none(value: Any) -> bool | None:
         if lowered in {"false", "0", "off"}:
             return False
     return bool(value)
+
+@dataclass(slots=True)
+class GrainfatherEspLiveState:
+    """Mutable read-only cache for one ESP accessory's observed MQTT state."""
+
+    chip_id: str
+    broker_connected: bool = False
+    broker: str | None = None
+    device_online: bool | None = None
+    event: GrainfatherEspEvent | None = None
+    meta: GrainfatherEspMeta | None = None
+    config: dict[str, Any] | None = None
+    profiles: Any = None
+    last_topic: str | None = None
+    last_message_at: datetime | None = None
+
+
+@dataclass(slots=True)
+class GrainfatherEspRuntimeStore:
+    """In-memory cache for subscribe-only ESP MQTT observations."""
+
+    states: dict[str, GrainfatherEspLiveState] = field(default_factory=dict)
+
+    def get(self, chip_id: str | None) -> GrainfatherEspLiveState | None:
+        if not chip_id:
+            return None
+        return self.states.get(chip_id.strip().casefold())
+
+    def ensure(self, chip_id: str) -> GrainfatherEspLiveState:
+        normalized = chip_id.strip().casefold()
+        if not normalized:
+            raise ValueError("chip_id must not be empty")
+        state = self.states.get(normalized)
+        if state is None:
+            state = GrainfatherEspLiveState(chip_id=normalized)
+            self.states[normalized] = state
+        return state
+
+    def set_broker_connected(
+        self,
+        chip_ids: tuple[str, ...] | list[str],
+        connected: bool,
+        *,
+        broker: str | None = None,
+    ) -> None:
+        for chip_id in chip_ids:
+            state = self.ensure(chip_id)
+            state.broker_connected = connected
+            if broker is not None:
+                state.broker = broker
+
+    def ingest(
+        self,
+        topic: str,
+        payload: str | bytes,
+        *,
+        received_at: datetime | None = None,
+    ) -> GrainfatherEspLiveState:
+        chip_id, topic_type = parse_device_topic(topic)
+        state = self.ensure(chip_id)
+        state.last_topic = topic
+        state.last_message_at = received_at or datetime.now(timezone.utc)
+
+        if topic_type == "status":
+            state.device_online = parse_status_payload(payload)
+        elif topic_type == "meta":
+            state.meta = parse_meta_payload(payload)
+        elif topic_type == "config":
+            state.config = _json_object(payload)
+        elif topic_type == "events":
+            state.event = parse_event_payload(payload)
+        elif topic_type == "profiles":
+            state.profiles = json.loads(_decode_payload(payload))
+
+        return state
+
+
+def parse_device_topic(topic: str) -> tuple[str, str]:
+    """Split a modern Grainfather device topic into chip id and topic type."""
+    parts = topic.strip().split("/")
+    if len(parts) < 3 or parts[0] != "devices" or not parts[1] or not parts[2]:
+        raise ValueError(f"Unsupported Grainfather MQTT topic: {topic!r}")
+    return parts[1].casefold(), parts[2]
+
