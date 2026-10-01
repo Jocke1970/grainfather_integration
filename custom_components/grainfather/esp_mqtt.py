@@ -264,6 +264,7 @@ class GrainfatherEspMqttSubscriber:
             return
 
         topic, payload, qos, packet_id = _parse_publish_packet(flags, body)
+        state = None
         try:
             state = self._runtime_store.ingest(topic, payload)
         except (ValueError, TypeError) as err:
@@ -272,13 +273,15 @@ class GrainfatherEspMqttSubscriber:
                 topic,
                 err,
             )
-            return
-
-        self._on_update()
+        else:
+            self._on_update()
 
         if qos == 1 and packet_id is not None:
             writer.write(b"\x40\x02" + packet_id.to_bytes(2, "big"))  # PUBACK.
             await writer.drain()
+
+        if state is None:
+            return
 
         chip_id, topic_type = parse_device_topic(topic)
         if topic_type == "status" and state.device_online is True:
