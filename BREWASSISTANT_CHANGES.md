@@ -97,6 +97,8 @@ Implemented read-only groundwork:
 - fermentation sensor attributes identify the discovered controller transport;
 - `esp_runtime.py` contains pure topic helpers and parsers for incoming
   `events`, `meta` and `status` payloads;
+- `tools/probe_esp_accessory_readonly.py` field-tests REST-side controller/accessory
+  discovery without opening MQTT;
 - there is deliberately **no MQTT publish function** in the integration.
 
 MQTT authentication is only partially verified from the app bundle. The app uses
