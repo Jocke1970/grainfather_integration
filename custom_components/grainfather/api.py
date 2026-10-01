@@ -371,11 +371,25 @@ class GrainfatherApiClient:
 
     async def async_get_accessory_devices(self) -> tuple[GrainfatherAccessoryDevice, ...]:
         """Return controller/accessory metadata used by the current Grainfather app runtime."""
-        payload = await self._request_json(
-            "GET",
-            "/accessory-devices",
-            include_api_token_query=True,
-        )
+        if self._access_token is None:
+            await self.authenticate()
+
+        try:
+            payload = await self._request_json(
+                "GET",
+                "/accessory-devices",
+                query_params={"api_token": self._access_token},
+                retry_on_auth_error=False,
+            )
+        except GrainfatherAuthenticationError:
+            await self.authenticate()
+            payload = await self._request_json(
+                "GET",
+                "/accessory-devices",
+                query_params={"api_token": self._access_token},
+                retry_on_auth_error=False,
+            )
+
         return parse_accessory_devices_payload(payload)
 
     async def async_get_fermentation_device_history(
@@ -405,7 +419,6 @@ class GrainfatherApiClient:
         json_payload: dict[str, Any] | None = None,
         query_params: dict[str, Any] | None = None,
         retry_on_auth_error: bool = True,
-        include_api_token_query: bool = False,
     ) -> Any:
         if self._access_token is None:
             await self.authenticate()
@@ -418,12 +431,9 @@ class GrainfatherApiClient:
         params: dict[str, Any] | None = None
         if method.upper() == "GET":
             # Add a cache-buster to reduce stale responses from intermediate proxies/CDNs.
-            effective_query_params = dict(query_params or {})
-            if include_api_token_query:
-                effective_query_params["api_token"] = self._access_token
             params = {
                 "_ts": int(datetime.now(timezone.utc).timestamp()),
-                **effective_query_params,
+                **(query_params or {}),
             }
 
         try:
@@ -443,7 +453,6 @@ class GrainfatherApiClient:
                         json_payload=json_payload,
                         query_params=query_params,
                         retry_on_auth_error=False,
-                        include_api_token_query=include_api_token_query,
                     )
 
                 if response.status in (401, 403):
