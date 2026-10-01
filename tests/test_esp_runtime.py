@@ -3,9 +3,13 @@ import json
 import pytest
 
 from custom_components.grainfather.esp_runtime import (
+    ESP_INITIAL_SUBSCRIPTION_SECONDS,
+    ESP_REFRESH_SUBSCRIPTION_SECONDS,
+    ESP_SUBSCRIPTION_TIME_COMMAND,
     PRIMARY_MQTT_BROKER,
     SECONDARY_MQTT_BROKER,
     GrainfatherEspRuntimeStore,
+    command_topic,
     device_topic,
     mqtt_credentials,
     mqtt_password,
@@ -15,6 +19,7 @@ from custom_components.grainfather.esp_runtime import (
     parse_meta_payload,
     parse_status_payload,
     subscription_topics,
+    telemetry_keepalive_payload,
 )
 
 
@@ -40,6 +45,18 @@ def test_device_topic_rejects_empty_chip_id() -> None:
         device_topic("   ")
 
 
+def test_telemetry_keepalive_payload_is_bounded_to_command_23() -> None:
+    assert ESP_SUBSCRIPTION_TIME_COMMAND == 23
+    assert ESP_INITIAL_SUBSCRIPTION_SECONDS == 15
+    assert ESP_REFRESH_SUBSCRIPTION_SECONDS == 120
+    assert telemetry_keepalive_payload(15) == '{"command":23,"value":"15"}'
+    assert telemetry_keepalive_payload(120) == '{"command":23,"value":"120"}'
+    assert command_topic("ABC123") == "devices/ABC123/command"
+
+    with pytest.raises(ValueError):
+        telemetry_keepalive_payload(30)
+
+
 def test_parse_status_payload() -> None:
     assert parse_status_payload("true") is True
     assert parse_status_payload("false") is False
@@ -55,6 +72,7 @@ def test_parse_event_payload_normalizes_gf30_fields() -> None:
             "heatStatus": True,
             "coolStatus": False,
             "rssi": "-61",
+            "subTime": "17",
         },
         "settings": {
             "controlMode": 1,
@@ -79,6 +97,7 @@ def test_parse_event_payload_normalizes_gf30_fields() -> None:
     assert event.heating is True
     assert event.cooling is False
     assert event.rssi == -61.0
+    assert event.subscription_time == 17
     assert event.control_mode == 1
     assert event.control_active is True
     assert event.units == 1
@@ -205,3 +224,7 @@ def test_runtime_store_ingests_read_only_topics() -> None:
     assert state.config == {"example": 1}
     assert state.profiles == [{"id": 1}]
     assert state.last_message_at is not None
+    store.mark_telemetry_keepalive(chip_id, 120)
+    assert state.telemetry_keepalive_seconds == 120
+    assert state.telemetry_keepalive_count == 1
+    assert state.telemetry_keepalive_last_sent_at is not None
