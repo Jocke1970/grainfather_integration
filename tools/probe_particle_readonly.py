@@ -67,7 +67,11 @@ def _grainfather_login(email: str, password: str) -> str:
     if not isinstance(payload, dict):
         raise RuntimeError("Unexpected Grainfather login response")
 
-    token = payload.get("api_token") or payload.get("accessToken") or payload.get("token")
+    token = (
+        payload.get("api_token")
+        or payload.get("accessToken")
+        or payload.get("token")
+    )
     if not isinstance(token, str) or not token:
         raise RuntimeError("Grainfather login response did not contain an API token")
     return token
@@ -218,13 +222,14 @@ def main() -> int:
         )
     elif matched_variables:
         print(
-            "RESULT: legacy-style Grainfather controller telemetry is visible read-only. "
-            "This is sufficient evidence to design a Home Assistant realtime adapter."
+            "RESULT: legacy-style Grainfather controller telemetry "
+            "is visible read-only. This is sufficient evidence to design "
+            "a Home Assistant realtime adapter."
         )
     else:
         print(
-            "RESULT: Particle device(s) are visible, but the expected legacy controller "
-            "variables were not advertised."
+            "RESULT: Particle device(s) are visible, but the expected "
+            "legacy controller variables were not advertised."
         )
 
     return 0
