@@ -72,6 +72,40 @@ actual temperature, target, heating, cooling, online and controller status with
 explicit freshness/fallback rules. If it is absent, research moves to the current
 ESP/Grainfather backend while REST/history remains the supported read path.
 
+## Phase 3 — current ESP/MQTT runtime discovery
+
+Reverse engineering of the current Grainfather Android app (5.7.0) on 2026-10-01
+confirmed that modern linked controllers use a Grainfather ESP/MQTT runtime rather
+than the legacy Particle-session path.
+
+Verified application behavior:
+
+- accessory/controller discovery: `GET /api/accessory-devices?api_token=...`;
+- primary MQTT broker default: `mqtt.grainfather.com`;
+- fallback broker: `mqtt2.grainfather.com`;
+- device topic prefix: `devices/<chip_id>/`;
+- the app subscribes to `#`, `meta`, `status` and `config` below that prefix;
+- GF30/WFC event payloads expose `data.temp`, `data.target`,
+  `data.heatStatus`, `data.coolStatus`, controller settings and session state;
+- retained `meta` payloads expose firmware/error/network metadata.
+
+Implemented read-only groundwork:
+
+- fermentation-device records now retain `esp_chip_id` and `particle_device_id`;
+- snapshots optionally discover accessory devices without making that endpoint a
+  hard dependency for the stable REST/history path;
+- fermentation sensor attributes identify the discovered controller transport;
+- `esp_runtime.py` contains pure topic helpers and parsers for incoming
+  `events`, `meta` and `status` payloads;
+- there is deliberately **no MQTT publish function** in the integration.
+
+MQTT authentication is only partially verified from the app bundle. The app uses
+the Grainfather user ID as the MQTT username and derives the password by applying
+webpack module 2517 to `<user_id>BEVIE`. The exact hash implementation has not yet
+been independently identified, so a live MQTT client is intentionally not enabled.
+
+REST/history remains the supported fallback and does not depend on MQTT.
+
 ## Write boundary
 
 No physical-controller write is approved by this branch at this stage.
