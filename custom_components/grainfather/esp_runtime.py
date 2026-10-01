@@ -246,7 +246,7 @@ class GrainfatherEspLiveState:
 
 @dataclass(slots=True)
 class GrainfatherEspRuntimeStore:
-    """In-memory cache for subscribe-only ESP MQTT observations."""
+    """In-memory cache for ESP MQTT telemetry observations."""
 
     states: dict[str, GrainfatherEspLiveState] = field(default_factory=dict)
 
