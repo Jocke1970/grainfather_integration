@@ -10,5 +10,5 @@
   "issue_tracker": "https://github.com/fidley/grainfather_integration/issues",
   "loggers": ["custom_components.grainfather"],
   "requirements": [],
-  "version": "0.1.5-ba.3"
+  "version": "0.1.5-ba.4"
 }
