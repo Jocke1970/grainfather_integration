@@ -185,6 +185,9 @@ def test_runtime_store_ingests_read_only_topics() -> None:
 
     assert state is store.get("abc123")
     assert state.broker_connected is True
+    store.set_subscription_result([chip_id], True, (0, 0, 0, 0))
+    assert state.mqtt_subscribed is True
+    assert state.subscription_codes == (0, 0, 0, 0)
     assert state.broker == PRIMARY_MQTT_BROKER
     store.set_connection_error([chip_id], "test connection error")
     assert state.last_connection_error == "test connection error"
