@@ -188,3 +188,44 @@ This release is intended for a controlled field capture: with Home Assistant
 connected, change only the GF30 target temperature once in the official app and
 inspect the resulting observer attributes. The captured command will then be
 used to design a separately bounded supervised target-write path with readback.
+
+
+## Phase 6 — supervised GF30 target write and live entities (v0.1.5-ba.7)
+
+Field capture with the official Grainfather app verified the modern GF30 target
+command on 2026-10-02:
+
+```json
+{"command":0,"value":"21.00"}
+```
+
+The same controller immediately reported `data.target = 21` in a fresh MQTT
+event. Based on that field evidence, `ba.7` adds one deliberately bounded
+controller write:
+
+- Home Assistant service: `grainfather.set_controller_target_temperature`;
+- requires fermentation `device_id`, Celsius `temperature`, and
+  `confirm: true`;
+- publishes only command 0 with a two-decimal target string;
+- target writes are technically bounded to 0-40 °C;
+- the service requires a newer MQTT event whose target matches the request;
+- mismatch/timeout is reported as failure instead of assuming success;
+- write request/result/readback diagnostics are exposed on the fermentation
+  sensor attributes.
+
+The outbound MQTT boundary is now exactly:
+
+- command 0: supervised target temperature only;
+- command 23: telemetry subscription maintenance only;
+- all other controller commands remain unavailable.
+
+This release also promotes already decoded live GF30 values into Home Assistant
+entities. In addition to current temperature, target temperature and gravity,
+linked ESP controllers expose binary entities for controller online, heating,
+cooling, control active, managed mode, lower-temperature alert and OTA
+availability, plus diagnostic sensors for RSSI, hysteresis, temperature offset,
+control-mode code, units code, firmware/error/OTA status and controller
+session/stage fields.
+
+No heater, cooling, control-mode, profile, hysteresis, calibration, OTA or
+session write path is implemented.
