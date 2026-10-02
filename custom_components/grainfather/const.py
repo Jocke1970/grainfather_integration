@@ -6,6 +6,8 @@ PLATFORMS = ["sensor", "button", "select"]
 CONF_EMAIL = "email"
 CONF_PASSWORD = "password"
 CONF_ENTRY_ID = "entry_id"
+CONF_DEVICE_ID = "device_id"
+CONF_CONFIRM = "confirm"
 CONF_BREW_SESSION_ID = "brew_session_id"
 CONF_RECIPE_ID = "recipe_id"
 CONF_STATUS = "status"
@@ -38,6 +40,7 @@ SERVICE_CLEAR_FERMENTATION_STEP_FINISH_TEMPERATURE = (
 SERVICE_ADJUST_CURRENT_STEP_TEMPERATURE = "adjust_current_step_temperature"
 SERVICE_ADJUST_CURRENT_STEP_DURATION = "adjust_current_step_duration"
 SERVICE_ADVANCE_TO_NEXT_FERMENTATION_STEP = "advance_to_next_fermentation_step"
+SERVICE_SET_CONTROLLER_TARGET_TEMPERATURE = "set_controller_target_temperature"
 
 BREW_SESSION_STATUS_MAP = {
 	"planning": 5,
