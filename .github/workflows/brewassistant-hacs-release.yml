@@ -81,6 +81,7 @@ jobs:
           - command 23 remains limited to telemetry values 15/120
           - live GF30 controller sensors and binary sensors
           - no heater, cooling, control-mode, profile, hysteresis or calibration write path
+          - Home Assistant async-safe cached TLS context for raw MQTT
           - safe connection/write diagnostics and REST/history fallback
 
           This is a BrewAssistant test build, not an upstream fidley release.
