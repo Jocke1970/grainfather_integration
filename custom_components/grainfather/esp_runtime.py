@@ -12,9 +12,12 @@ SECONDARY_MQTT_BROKER = "mqtt2.grainfather.com"
 # The current Grainfather app subscribes to these suffixes for every ESP accessory.
 # "#" includes events/profiles; the explicit retained topics mirror the app runtime.
 MQTT_SUBSCRIPTION_SUFFIXES = ("#", "meta", "status", "config")
+ESP_SET_TARGET_TEMPERATURE_COMMAND = 0
 ESP_SUBSCRIPTION_TIME_COMMAND = 23
 ESP_INITIAL_SUBSCRIPTION_SECONDS = 15
 ESP_REFRESH_SUBSCRIPTION_SECONDS = 120
+ESP_TARGET_TEMPERATURE_MIN_C = 0.0
+ESP_TARGET_TEMPERATURE_MAX_C = 40.0
 ESP_EVENT_FRESHNESS_SECONDS = 180
 ESP_MAX_OBSERVED_COMMAND_PAYLOAD_CHARS = 512
 
@@ -94,6 +97,24 @@ def subscription_topics(chip_id: str) -> tuple[str, ...]:
     """Return the read-only topic set mirrored from the Grainfather app."""
     prefix = device_topic(chip_id)
     return tuple(f"{prefix}{suffix}" for suffix in MQTT_SUBSCRIPTION_SUFFIXES)
+
+
+def target_temperature_payload(temperature_c: float) -> str:
+    """Build the field-verified GF30 target-temperature command payload."""
+    target = float(temperature_c)
+    if not ESP_TARGET_TEMPERATURE_MIN_C <= target <= ESP_TARGET_TEMPERATURE_MAX_C:
+        raise ValueError(
+            "Grainfather target temperature must be between "
+            f"{ESP_TARGET_TEMPERATURE_MIN_C:.1f} and "
+            f"{ESP_TARGET_TEMPERATURE_MAX_C:.1f} °C"
+        )
+    return json.dumps(
+        {
+            "command": ESP_SET_TARGET_TEMPERATURE_COMMAND,
+            "value": f"{target:.2f}",
+        },
+        separators=(",", ":"),
+    )
 
 
 def telemetry_keepalive_payload(seconds: int) -> str:
@@ -250,6 +271,11 @@ class GrainfatherEspLiveState:
     observed_external_command_value: Any = None
     observed_external_command_payload: str | None = None
     observed_external_command_count: int = 0
+    target_write_last_requested_at: datetime | None = None
+    target_write_last_requested_value: float | None = None
+    target_write_last_result: str | None = None
+    target_write_last_readback_at: datetime | None = None
+    target_write_last_readback_value: float | None = None
 
 
 def event_age_seconds(
@@ -340,6 +366,37 @@ class GrainfatherEspRuntimeStore:
         state.telemetry_keepalive_last_sent_at = sent_at or datetime.now(UTC)
         state.telemetry_keepalive_seconds = seconds
         state.telemetry_keepalive_count += 1
+
+    def mark_target_write_requested(
+        self,
+        chip_id: str,
+        target: float,
+        *,
+        requested_at: datetime | None = None,
+    ) -> None:
+        state = self.ensure(chip_id)
+        state.target_write_last_requested_at = requested_at or datetime.now(UTC)
+        state.target_write_last_requested_value = float(target)
+        state.target_write_last_result = "pending"
+        state.target_write_last_readback_at = None
+        state.target_write_last_readback_value = None
+
+    def mark_target_write_result(
+        self,
+        chip_id: str,
+        result: str,
+        *,
+        readback_value: float | None = None,
+        readback_at: datetime | None = None,
+    ) -> None:
+        state = self.ensure(chip_id)
+        state.target_write_last_result = result
+        state.target_write_last_readback_value = readback_value
+        state.target_write_last_readback_at = (
+            readback_at or datetime.now(UTC)
+            if readback_value is not None
+            else None
+        )
 
     def observe_command(
         self,
