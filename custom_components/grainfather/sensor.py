@@ -26,6 +26,7 @@ from .api import (
 from .const import BREW_SESSION_STATUS_NAME_BY_CODE, DOMAIN
 from .const import CONF_DEFAULT_DENSITY_UNIT, DEFAULT_DENSITY_UNIT
 from .coordinator import GrainfatherDataUpdateCoordinator
+from .esp_runtime import event_age_seconds, event_is_fresh
 
 _MAX_EXPOSED_BATCH_HISTORY_POINTS = 20
 _MAX_EXPOSED_DEVICE_HISTORY_POINTS = 5
@@ -205,6 +206,19 @@ def _get_collaborating_devices(
     return collaborators
 
 
+def _fresh_live_event(
+    device: GrainfatherFermentationDevice,
+    coordinator: GrainfatherDataUpdateCoordinator,
+):
+    """Return current ESP event only while it is fresh enough to beat REST."""
+    if not device.esp_chip_id:
+        return None
+    live = coordinator.esp_runtime.get(device.esp_chip_id)
+    if not event_is_fresh(live):
+        return None
+    return live.event if live else None
+
+
 def _controller_runtime_metadata(
     device: GrainfatherFermentationDevice,
     coordinator: GrainfatherDataUpdateCoordinator,
@@ -224,6 +238,8 @@ def _controller_runtime_metadata(
         live = coordinator.esp_runtime.get(device.esp_chip_id)
         event = live.event if live else None
         meta = live.meta if live else None
+        event_age = event_age_seconds(live)
+        event_fresh = event_is_fresh(live)
         return {
             "controller_transport": "esp_mqtt",
             "esp_chip_id": device.esp_chip_id,
@@ -252,6 +268,15 @@ def _controller_runtime_metadata(
                 else None
             ),
             "live_mqtt_last_topic": live.last_topic if live else None,
+            "live_mqtt_event_last_received_at": (
+                live.last_event_at.isoformat()
+                if live and live.last_event_at
+                else None
+            ),
+            "live_mqtt_event_age_seconds": (
+                round(event_age, 1) if event_age is not None else None
+            ),
+            "live_mqtt_event_fresh": event_fresh,
             "live_mqtt_last_error": (
                 live.last_connection_error if live else None
             ),
@@ -593,6 +618,9 @@ class GrainfatherFermDeviceTemperatureSensor(
         device = self._device
         if device is None:
             return None
+        event = _fresh_live_event(device, self.coordinator)
+        if event is not None and event.temperature is not None:
+            return event.temperature
         if device.last_temperature is not None:
             return device.last_temperature
         history = self.coordinator.data.fermentation_history_by_device_id.get(
@@ -618,9 +646,15 @@ class GrainfatherFermDeviceTemperatureSensor(
             tuple(),
         )
         collaborators = _get_collaborating_devices(device, self.coordinator.data)
+        live_event = _fresh_live_event(device, self.coordinator)
         return {
             "grainfather_entity_type": "fermentation_device",
             "grainfather_measurement": "temperature",
+            "effective_temperature_source": (
+                "mqtt_live"
+                if live_event is not None and live_event.temperature is not None
+                else "rest_history"
+            ),
             "device_id": device.device_id,
             "last_heard": device.last_heard,
             "last_specific_gravity": device.last_specific_gravity,
@@ -678,6 +712,9 @@ class GrainfatherFermDeviceTargetTemperatureSensor(
         device = self._device
         if device is None:
             return None
+        event = _fresh_live_event(device, self.coordinator)
+        if event is not None and event.target_temperature is not None:
+            return event.target_temperature
         history = self.coordinator.data.fermentation_history_by_device_id.get(
             device.device_id or -1,
             tuple(),
@@ -700,9 +737,16 @@ class GrainfatherFermDeviceTargetTemperatureSensor(
             device.device_id or -1,
             tuple(),
         )
+        live_event = _fresh_live_event(device, self.coordinator)
         return {
             "grainfather_entity_type": "fermentation_device",
             "grainfather_measurement": "target_temperature",
+            "effective_target_temperature_source": (
+                "mqtt_live"
+                if live_event is not None
+                and live_event.target_temperature is not None
+                else "rest_history"
+            ),
             "device_id": device.device_id,
             "linked_brew_session_id": device.linked_brew_session_id,
             "linked_brew_session_name": device.linked_brew_session_name,
