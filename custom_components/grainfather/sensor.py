@@ -330,6 +330,25 @@ def _controller_runtime_metadata(
             "live_mqtt_observed_external_command_count": (
                 live.observed_external_command_count if live else 0
             ),
+            "target_write_last_requested_at": (
+                live.target_write_last_requested_at.isoformat()
+                if live and live.target_write_last_requested_at
+                else None
+            ),
+            "target_write_last_requested_value": (
+                live.target_write_last_requested_value if live else None
+            ),
+            "target_write_last_result": (
+                live.target_write_last_result if live else None
+            ),
+            "target_write_last_readback_at": (
+                live.target_write_last_readback_at.isoformat()
+                if live and live.target_write_last_readback_at
+                else None
+            ),
+            "target_write_last_readback_value": (
+                live.target_write_last_readback_value if live else None
+            ),
             "live_mqtt_telemetry_keepalive_last_sent_at": (
                 live.telemetry_keepalive_last_sent_at.isoformat()
                 if live and live.telemetry_keepalive_last_sent_at
@@ -354,6 +373,9 @@ def _controller_runtime_metadata(
             "controller_units": event.units if event else None,
             "controller_hysteresis": event.hysteresis if event else None,
             "controller_temperature_offset": event.temperature_offset if event else None,
+            "lower_temp_alert_enabled": (
+                event.lower_temp_alert_enabled if event else None
+            ),
             "session_id": event.session_id if event else None,
             "managed_mode": event.managed_mode if event else None,
             "session_stage": event.session_stage if event else None,
@@ -538,6 +560,24 @@ def _build_sensor_entities(
                 )
             )
 
+        if device.esp_chip_id:
+            for description in LIVE_CONTROLLER_SENSORS:
+                live_unique_id = (
+                    f"{entry.entry_id}_fermdevice_{device.device_id}_"
+                    f"{description.key}"
+                )
+                if live_unique_id in known_unique_ids:
+                    continue
+                known_unique_ids.add(live_unique_id)
+                entities.append(
+                    GrainfatherFermDeviceLiveSensor(
+                        coordinator,
+                        entry,
+                        device.device_id,
+                        description,
+                    )
+                )
+
         gravity_unique_id = f"{entry.entry_id}_fermdevice_{device.device_id}_gravity"
         if gravity_unique_id not in known_unique_ids:
             known_unique_ids.add(gravity_unique_id)
@@ -630,6 +670,90 @@ class GrainfatherSessionSensor(
             return None
         return session.recipe_image_url
 
+
+
+
+class GrainfatherFermDeviceLiveSensor(
+    CoordinatorEntity[GrainfatherDataUpdateCoordinator],
+    SensorEntity,
+):
+    """One normalized live controller value exposed as a real HA sensor."""
+
+    def __init__(
+        self,
+        coordinator: GrainfatherDataUpdateCoordinator,
+        entry: ConfigEntry,
+        device_id: int,
+        description: SensorEntityDescription,
+    ) -> None:
+        super().__init__(coordinator)
+        self.entity_description = description
+        self._device_id = device_id
+        self._attr_has_entity_name = True
+        self._attr_unique_id = (
+            f"{entry.entry_id}_fermdevice_{device_id}_{description.key}"
+        )
+
+    @property
+    def _device(self) -> GrainfatherFermentationDevice | None:
+        return next(
+            (
+                device
+                for device in self.coordinator.data.fermentation_devices
+                if device.device_id == self._device_id
+            ),
+            None,
+        )
+
+    @property
+    def available(self) -> bool:
+        device = self._device
+        return bool(device and device.esp_chip_id)
+
+    @property
+    def device_info(self) -> DeviceInfo | None:
+        device = self._device
+        if device is None:
+            return None
+        return _ferm_device_info(device, self.coordinator.data)
+
+    @property
+    def native_value(self) -> Any:
+        device = self._device
+        if device is None or not device.esp_chip_id:
+            return None
+        live = self.coordinator.esp_runtime.get(device.esp_chip_id)
+        if live is None:
+            return None
+        event = live.event
+        meta = live.meta
+        key = self.entity_description.key
+
+        if key == "controller_rssi":
+            return event.rssi if event and event.rssi is not None else (meta.rssi if meta else None)
+        if key == "controller_hysteresis":
+            return event.hysteresis if event else None
+        if key == "controller_temperature_offset":
+            return event.temperature_offset if event else None
+        if key == "control_mode":
+            return event.control_mode if event else None
+        if key == "controller_units":
+            return event.units if event else None
+        if key == "firmware_version":
+            return meta.firmware_version if meta else None
+        if key == "controller_error_code":
+            return meta.error_code if meta else None
+        if key == "controller_ota_status":
+            return meta.ota_status if meta else None
+        if key == "session_id":
+            return event.session_id if event else None
+        if key == "session_stage":
+            return event.session_stage if event else None
+        if key == "stage_end_time":
+            return event.stage_end_time if event else None
+        if key == "live_mqtt_event_subscription_time":
+            return event.subscription_time if event else None
+        return None
 
 
 class GrainfatherFermDeviceTemperatureSensor(
