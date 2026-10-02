@@ -4,231 +4,318 @@
 > This branch is the BrewAssistant-oriented Grainfather variant.
 > Development branch: `brewassistant-grainfather`.
 > The fork's `main` remains upstream-tracking.
-> See [BREWASSISTANT_CHANGES.md](BREWASSISTANT_CHANGES.md) for scope, safety boundaries and development phases.
+> See [BREWASSISTANT_CHANGES.md](BREWASSISTANT_CHANGES.md) for verified protocol research,
+> safety boundaries and release-by-release development notes.
 
-Custom Home Assistant integration for Grainfather cloud data, including brew sessions, fermentation devices, recipe images, and session controls.
+Custom Home Assistant integration for Grainfather cloud data and modern GF30 ESP/MQTT
+telemetry, including brew sessions, fermentation devices, live controller state and a
+bounded supervised target-temperature write path.
 
-## Support
+## Current BrewAssistant baseline
 
-If this project helps your brewing workflow, you can support development here:
+Current development release: **v0.1.5-ba.8**
 
-- [Buy Me a Beer](https://buymeacoffee.com/abapblog)
+Verified on a real Grainfather GF30 / ESP-linked controller:
+
+- Grainfather REST remains the stable cloud/history fallback.
+- Live controller telemetry uses Grainfather MQTT over TLS/8883.
+- Primary broker: `mqtt.grainfather.com:8883/tls`.
+- Secondary TLS broker: `mqtt2.grainfather.com:8883/tls`.
+- Plaintext MQTT fallback is intentionally disabled.
+- Home Assistant can activate and maintain live GF30 telemetry without the official app.
+- Fresh MQTT data takes precedence over REST/history.
+- MQTT event freshness is tracked independently from outbound command echoes.
+- Home Assistant's cached SSL helper is used to avoid blocking certificate loading in the event loop.
+- The modern GF30 target-temperature command was field-captured from the official app:
+  `{"command":0,"value":"21.00"}`.
+- A supervised Home Assistant service can set controller target temperature and requires
+  a fresh MQTT readback before success is reported.
+
+## Safety boundary
+
+Outbound controller MQTT is deliberately restricted.
+
+Approved commands:
+
+- **Command 0** — supervised GF30 target temperature only.
+- **Command 23** — telemetry subscription maintenance only, with values `15` and `120`.
+
+There is **no generic MQTT publish API**.
+
+The integration does **not** expose direct writes for:
+
+- heater
+- cooling pump / cooling state
+- control mode
+- hysteresis
+- temperature calibration / offset
+- OTA
+- profiles
+- controller session state
+
+BrewAssistant should treat the GF30 controller as the owner of heater/cooling logic and
+only request a target temperature through the supervised service.
 
 ## Features
 
-- Config flow with Grainfather email and password
-- Brew session entities with batch, gravity, style, recipe image, and batch variant data
-- Brew session attributes including `condition_date`, `fermentation_start_date`, and `created_at`
-- Fermentation device temperature, target temperature and gravity sensors
-- History data exposed on brew session attributes
-- Service actions for changing brew session status and fermentation steps
-- Button and select helpers for common brew session actions
-- Local integration branding assets for Home Assistant `2026.3+`
+### Brew sessions
+
+- Config flow with Grainfather email/password.
+- Brew-session entities for batch, style, gravity, ABV, recipe image and variants.
+- Fermentation-step editing through the Grainfather cloud API.
+- Session status controls and helpers.
+- History data exposed on brew-session attributes.
+
+### Fermentation devices
+
+Core entities include:
+
+- Temperature
+- Target Temperature
+- Gravity
+
+For ESP-linked GF30 controllers, live entities also include:
+
+Binary sensors:
+
+- Controller Online
+- Heating
+- Cooling
+- Control Active
+- Managed Mode
+- Lower Temperature Alert Enabled
+- OTA Update Available
+
+Sensors:
+
+- Controller RSSI
+- Controller Hysteresis
+- Controller Temperature Offset
+- Control Mode Code
+- Units Code
+- Firmware Version
+- Controller Error Code
+- OTA Status Code
+- Controller Session ID
+- Controller Session Stage
+- Controller Stage End Time
+- MQTT Event Subscription Value
+
+Not every firmware/controller state publishes every field. Some entities may therefore
+remain `unknown` until the controller actually provides a value.
+
+> [!NOTE]
+> `OTA Update Available`, firmware, RSSI, OTA status and session fields may be absent/null
+> on a given GF30. An unknown/null OTA value is **not evidence that an update is available**.
+> The official Grainfather app remains the authoritative user-facing source for whether an
+> OTA update is actually being offered.
+
+## Live MQTT architecture
+
+Modern GF30 controllers use a Grainfather ESP/MQTT runtime.
+
+Verified topic prefix:
+
+`devices/<chip_id>/`
+
+The integration subscribes beneath that prefix and consumes:
+
+- `events`
+- `status`
+- `meta`
+- `config`
+- `profiles`
+- wildcard traffic needed for protocol observation
+
+Live event fields currently decoded include:
+
+- current temperature
+- target temperature
+- heating
+- cooling
+- RSSI
+- subscription value
+- control mode
+- control active
+- units
+- hysteresis
+- temperature offset
+- lower-temperature-alert state
+- session ID
+- managed mode
+- session stage
+- stage end time
+
+Meta payloads can expose:
+
+- firmware version
+- controller error code
+- SSID
+- IP address
+- MAC address
+- OTA status
+- OTA available flag
+- RSSI
+
+## Freshness and fallback
+
+The effective temperature/target source is:
+
+1. fresh MQTT event data;
+2. REST/history fallback when MQTT is missing or stale.
+
+MQTT event freshness is intentionally separate from generic MQTT traffic, so the
+integration's own command publishes do not make stale telemetry appear current.
+
+## Supervised target-temperature service
+
+Service:
+
+`grainfather.set_controller_target_temperature`
+
+Required fields:
+
+- `device_id`
+- `temperature`
+- `confirm: true`
+
+Example:
+
+```yaml
+action: grainfather.set_controller_target_temperature
+data:
+  device_id: 92245
+  temperature: 18.0
+  confirm: true
+```
+
+Behavior:
+
+1. validates the device and bounded target range;
+2. requires a live/online subscribed GF30 MQTT controller;
+3. publishes only field-verified command 0;
+4. waits for a **new** MQTT event;
+5. succeeds only when the reported target matches the requested target;
+6. reports mismatch/timeout instead of assuming success.
+
+Current technical write bound: **0–40 °C**.
+
+Write diagnostics are exposed on the fermentation temperature sensor attributes,
+including request time/value and readback result/value.
+
+## Service actions
+
+The integration currently registers:
+
+- `grainfather.set_brew_session_status`
+- `grainfather.set_fermentation_steps`
+- `grainfather.set_fermentation_step_duration`
+- `grainfather.clear_fermentation_step_finish_temperature`
+- `grainfather.adjust_current_step_temperature`
+- `grainfather.adjust_current_step_duration`
+- `grainfather.advance_to_next_fermentation_step`
+- `grainfather.set_controller_target_temperature`
+
+The brew-session/recipe services operate through Grainfather cloud APIs.
+The GF30 controller-target service uses the separately bounded ESP/MQTT path described above.
 
 ## Installation
 
 ### HACS
 
 1. Open HACS.
-2. Add this repository as a custom repository of type `Integration` if it is not already listed.
+2. Add this repository as a custom repository of type `Integration` if required.
 3. Install `Grainfather`.
 4. Restart Home Assistant.
-5. Go to Settings > Devices & Services > Add Integration.
-6. Search for `Grainfather` and enter your Grainfather credentials.
+5. Go to **Settings → Devices & Services → Add Integration**.
+6. Search for `Grainfather` and enter Grainfather credentials.
 
 ### Manual
 
-1. Copy [custom_components/grainfather](custom_components/grainfather) into your Home Assistant `custom_components` directory.
-2. Restart Home Assistant.
-3. Add the `Grainfather` integration from Settings > Devices & Services.
+Copy `custom_components/grainfather` into Home Assistant's `custom_components`
+directory, restart Home Assistant and add the Grainfather integration.
 
-## Exposed Data
+## Dashboard / Lovelace
 
-The integration currently polls the Grainfather cloud API and exposes:
+The repository includes custom Grainfather JavaScript cards in
+`custom_components/grainfather/www`.
 
-- Brew sessions
-- Fermentation devices
-- Fermentation history linked to devices and sessions
-- Recipe images
+For the current GF30 controller dashboard, BrewAssistant development also uses common
+HACS frontend cards such as:
 
-The implementation is based on the API shape captured in the included Postman collection, including:
+- Mushroom
+- Stack In Card
+- Expander Card
+- Auto Entities
 
-- `/api/auth/login`
-- `/api/2/brew-sessions`
-- `/api/equipment/fermentation-devices`
+The preferred GF30 dashboard pattern is:
 
-## Service Actions
+- prominent current + target temperature;
+- color-coded Online / Heating / Cooling / Control status;
+- temperature history graph;
+- controller settings grouped separately from diagnostics;
+- dynamic entity lists filtered by the Grainfather GF30 device;
+- unknown diagnostics hidden from the normal view while remaining available in a raw/debug expander.
 
-The integration registers these service actions:
+## REST / cloud data
 
-1. `grainfather.set_brew_session_status`
-2. `grainfather.set_fermentation_steps`
-3. `grainfather.set_fermentation_step_duration`
+The Grainfather cloud side still provides:
 
-`grainfather.set_brew_session_status` accepts a `status` as either a numeric code or one of:
+- brew sessions
+- fermentation devices
+- fermentation history linked to devices and sessions
+- recipe images
+- accessory/controller discovery used to map ESP chip IDs
 
-- `planning`
-- `brewing`
-- `fermenting`
-- `conditioning`
-- `serving`
-- `completed`
+REST/history remains available even when MQTT telemetry is unavailable.
 
-## Branding
+## Historical Particle transport
 
-This repository includes local branding assets in [custom_components/grainfather/brand](custom_components/grainfather/brand).
+Older Grainfather projects used Particle sessions and functions such as
+`setTarget`. Live testing of the current linked GF30 account returned **no Particle session**.
 
-- `icon.png` is used for compact integration surfaces
-- `logo.png` is used where Home Assistant shows a wider brand image
+Particle-era projects remain protocol/history references only and are not a runtime
+dependency for this BrewAssistant branch.
 
-Home Assistant only uses local custom integration branding from `brand/` starting with version `2026.3`.
+## Development and verification
 
-## Development
+Important development rules:
 
-- [custom_components/grainfather](custom_components/grainfather) contains the integration source
-- [tests](tests) contains API parsing tests
-- [pyproject.toml](pyproject.toml) contains local tooling configuration
-- [Grainfather.postman_collection.json](Grainfather.postman_collection.json) contains the captured API collection used as a reference
+- Feature work stays on `brewassistant-grainfather`.
+- No controller write is added from historical assumptions alone.
+- New commands must be independently observed/verified before implementation.
+- Controller writes require narrow schemas, visible failure handling and readback where practical.
+- Full CI, Ruff and Hassfest must pass before a BrewAssistant release is considered ready for field testing.
 
-## Lovelace Cards
+Current automated baseline after `ba.8`:
 
-The repository includes several custom JavaScript cards in [custom_components/grainfather/www](custom_components/grainfather/www).
+- 56 tests passing
+- Ruff passing
+- Hassfest passing
 
-### Brew Collection Card
+HACS repository validation may still report repository-level metadata issues that are
+separate from integration runtime correctness.
 
-`grainfather-brew-collection-card.js` displays multiple brew sessions in a responsive grid with advanced filtering and deduplication.
+## Current limitations
 
-**Features:**
-
-- Display multiple brew sessions at once (V2 Detailed or V3 Compact layout)
-- Filter by status (fermenting, conditioning, serving, brewing, planning, completed)
-- Optional deduplication: show only one card per unique batch_number + session name pair
-- Optional grouping by status in separate sections
-- Responsive grid with configurable layout:
-  - fixed cards per row (`cards_per_row`)
-  - auto-fit mode with minimum card width (`card_min_width`)
-
-**Example configuration:**
-
-```yaml
-resources:
-  - url: /grainfather/grainfather-brew-collection-card.js
-    type: module
-
-cards:
-  - type: custom:grainfather-brew-collection-card
-    title: Active Brews
-    entities:
-      - sensor.grainfather_batch_01_batch_number
-      - sensor.grainfather_batch_02_batch_number
-      - sensor.grainfather_batch_03_batch_number
-    card_type: brew-session-detailed
-    statuses: [fermenting, conditioning, serving]
-    deduplicate: false
-    group_by_status: true
-```
-
-**Configuration Options:**
-
-- `title` (string): Display name for the collection
-- `entities` (list): Grainfather batch_number sensors to display
-- `card_type` (string): Card layout — `brew-session-detailed` (V2) or `brew-session-compact` (V3)
-- `statuses` (list): Filter by these statuses (default: all available)
-- `deduplicate` (boolean): Show only one card per batch_number + name pair
-- `group_by_status` (boolean): Group sessions by status in separate sections
-- `cards_per_row` (number): Fixed number of cards per row (`0` = auto-fit mode)
-- `card_min_width` (number): Minimum card width in px used by auto-fit mode
-
-### Brew Session Cards (Detailed & Compact)
-
-Display individual brew session details. Cards support `density_unit: default|sg|plato|brix` where `default` uses the integration-wide option.
-
-- Detailed card (V2) includes fermentation steps, current-step highlighting (only while `fermenting`), and step duration formatting (`1d 7h`).
-- Compact card (V3) provides a denser summary layout for large dashboards.
-
-### Fermentation Device Card
-
-`grainfather-fermentation-device-card.js` shows live fermentation-device telemetry and active session controls.
-
-Key capabilities:
-
-- Immediate UI response (optimistic updates) for temperature/duration step changes
-- Debounced batching of rapid adjustments
-- Absolute-value backend updates for safer multi-dashboard use
-- Optional fermentation steps list (`show_fermentation_steps`)
-- Current-step highlighting only when status is `fermenting`
-
-### On Tap Blackboard Card
-
-`grainfather-on-tap-card.js` renders a pub-style blackboard list of beers currently in status `serving`.
-
-- Shows only: batch number, style, ABV, original gravity
-- Filters sessions to `status = serving`
-- If a batch appears in multiple variants, only the first variant is shown
-- Supports `density_unit: default|sg|plato|brix` on all included brew session cards and the On Tap card
-- Mobile-friendly layout: ABV and gravity move to a second line to keep full beer names visible
-
-Example resource and card configuration:
-
-```yaml
-resources:
-  - url: /grainfather/grainfather-on-tap-card.js
-    type: module
-
-cards:
-  - type: custom:grainfather-on-tap-card
-    max_items: 12
-    density_unit: sg
-```
-
-## Dashboard UI Overview
-
-Recent dashboard views include:
-
-### Card Picker
-
-Shows all custom Grainfather cards available in Lovelace.
-
-![Card picker showing available Grainfather custom cards](docs/images/additional_cards.png)
-
-### On Tap Blackboard
-
-Shows serving and coming-soon beers using the blackboard layout.
-
-![On Tap blackboard card with serving and coming soon sections](docs/images/on_tap_card.png)
-
-### Brew Sessions With Compact Card
-
-Shows active sessions with the compact brew session layout.
-
-![Brew sessions dashboard using the compact card layout](docs/images/brew_session_with_compact_card.png)
-
-### Fermentation Device Dashboard
-
-Shows grouped fermentation-device cards for chambers, controllers, and pill sensors.
-
-![Fermentation device cards grouped by hardware area](docs/images/fermentation_devices_cards.png)
-
-### Brew Collection With Detailed Card
-
-Shows side-by-side detailed session cards in the collection grid.
-
-![Brew collection card using detailed session cards in a grid](docs/images/brew_sessions_collection_with_detailed_card.png)
-
-These examples reflect the current card behavior and layout options documented above.
-
-## Current Limitations
-
-- The Grainfather cloud API is not officially documented here, so some payload assumptions are based on observed responses.
-- Test coverage is focused on payload parsing and client behavior, not full Home Assistant integration runtime behavior.
-- The integration currently uses polling rather than push updates.
+- Grainfather's modern controller protocol is not officially documented for this integration;
+  behavior is based on reverse engineering plus live field verification.
+- Some MQTT/meta fields are firmware- and state-dependent and may remain unknown.
+- Raw control-mode/unit numeric mappings are not yet presented as human-readable enums.
+- `MQTT Event Subscription Value` is kept as a diagnostic raw value; it is not treated as
+  a countdown because its exact semantics have not been fully established.
+- The supervised target-write path is intentionally the only GF30 control write.
+- Full Home Assistant end-to-end runtime test coverage is still more limited than parser/client tests.
 
 ## Roadmap
 
-1. Add fixture-based tests from captured real API responses.
-2. Validate the integration against a live Home Assistant development instance.
-3. Expand entity coverage once more Grainfather API fields and workflows are confirmed.
+1. Field-test supervised target writes from Home Assistant across multiple target changes.
+2. Map verified control-mode/unit codes to human-readable values.
+3. Continue cataloguing real GF30 event/meta fields across active heating/cooling/session states.
+4. Improve the GF30 dashboard and supervised-apply UI.
+5. Keep REST/history as the stable fallback while MQTT behavior is hardened further.
 
-## Support The Project
+## BrewAssistant development log
 
-- [Buy Me a Beer](https://buymeacoffee.com/abapblog)
+See [BREWASSISTANT_CHANGES.md](BREWASSISTANT_CHANGES.md) for the detailed release and
+reverse-engineering history.
