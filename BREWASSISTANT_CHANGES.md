@@ -143,3 +143,26 @@ Home Assistant/BrewAssistant authorization, post-write readback and visible
 failure handling. BrewAssistant must never directly control the GF30 heater or
 cooling circulation pump merely because historical repositories contain those
 function names.
+
+
+## Phase 4 — GF30 MQTT hardening (v0.1.5-ba.5)
+
+Field testing of `ba.4` verified that Home Assistant can activate GF30 live
+telemetry without opening the Grainfather app. It also exposed three hardening
+requirements that are addressed in `ba.5`:
+
+- MQTT controller connections are TLS-only on port 8883; plaintext 1883
+  fallbacks have been removed.
+- wildcard echoes from `devices/<chip_id>/command` no longer advance inbound
+  telemetry timestamps or masquerade as controller data.
+- controller `events` have their own timestamp/freshness state. Fresh MQTT
+  events take precedence over REST/history, while stale MQTT automatically
+  falls back to REST/history.
+- telemetry keepalive is now refreshed proactively before the 120-second
+  subscription expires, instead of relying only on a future `subTime < 25`
+  event to trigger the next refresh.
+- controller-offline status cancels the proactive refresh schedule.
+
+The outbound write boundary is unchanged: only command 23 with values 15/120
+is permitted. There is still no target-temperature, mode, heater, cooling or
+profile write path.
