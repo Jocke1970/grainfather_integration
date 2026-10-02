@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 DOMAIN = "grainfather"
-PLATFORMS = ["sensor", "button", "select"]
+PLATFORMS = ["sensor", "binary_sensor", "button", "select"]
 
 CONF_EMAIL = "email"
 CONF_PASSWORD = "password"
