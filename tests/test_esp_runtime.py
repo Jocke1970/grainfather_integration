@@ -6,6 +6,9 @@ import pytest
 from custom_components.grainfather.esp_runtime import (
     ESP_EVENT_FRESHNESS_SECONDS,
     ESP_INITIAL_SUBSCRIPTION_SECONDS,
+    ESP_SET_TARGET_TEMPERATURE_COMMAND,
+    ESP_TARGET_TEMPERATURE_MAX_C,
+    ESP_TARGET_TEMPERATURE_MIN_C,
     ESP_REFRESH_SUBSCRIPTION_SECONDS,
     ESP_SUBSCRIPTION_TIME_COMMAND,
     PRIMARY_MQTT_BROKER,
@@ -23,6 +26,7 @@ from custom_components.grainfather.esp_runtime import (
     parse_meta_payload,
     parse_status_payload,
     subscription_topics,
+    target_temperature_payload,
     telemetry_keepalive_payload,
 )
 
@@ -317,3 +321,40 @@ def test_malformed_command_observation_is_ignored() -> None:
     store.observe_command("ABC123", b"not-json")
 
     assert store.get("ABC123") is None
+
+
+
+def test_target_temperature_payload_is_bounded_to_command_zero() -> None:
+    assert ESP_SET_TARGET_TEMPERATURE_COMMAND == 0
+    assert ESP_TARGET_TEMPERATURE_MIN_C == 0.0
+    assert ESP_TARGET_TEMPERATURE_MAX_C == 40.0
+    assert target_temperature_payload(21) == '{"command":0,"value":"21.00"}'
+    assert target_temperature_payload(1.5) == '{"command":0,"value":"1.50"}'
+
+    with pytest.raises(ValueError):
+        target_temperature_payload(-0.1)
+    with pytest.raises(ValueError):
+        target_temperature_payload(40.1)
+
+
+def test_target_write_diagnostics_are_recorded() -> None:
+    store = GrainfatherEspRuntimeStore()
+    requested_at = datetime(2026, 10, 2, 20, 0, tzinfo=UTC)
+    readback_at = requested_at + timedelta(seconds=1)
+
+    store.mark_target_write_requested("ABC123", 18.5, requested_at=requested_at)
+    state = store.get("ABC123")
+    assert state is not None
+    assert state.target_write_last_requested_at == requested_at
+    assert state.target_write_last_requested_value == 18.5
+    assert state.target_write_last_result == "pending"
+
+    store.mark_target_write_result(
+        "ABC123",
+        "verified",
+        readback_value=18.5,
+        readback_at=readback_at,
+    )
+    assert state.target_write_last_result == "verified"
+    assert state.target_write_last_readback_value == 18.5
+    assert state.target_write_last_readback_at == readback_at
