@@ -27,6 +27,8 @@ _MQTT_KEEPALIVE_SECONDS = 60
 _MQTT_IDLE_BEFORE_PING_SECONDS = 45
 _MQTT_PING_TIMEOUT_SECONDS = 15
 _MQTT_RECONNECT_DELAY_SECONDS = 30
+_MQTT_INITIAL_TELEMETRY_REFRESH_DELAY_SECONDS = 10
+_MQTT_TELEMETRY_REFRESH_INTERVAL_SECONDS = 90
 
 
 @dataclass(frozen=True, slots=True)
@@ -45,9 +47,7 @@ class GrainfatherMqttEndpoint:
 
 DEFAULT_MQTT_ENDPOINTS: tuple[GrainfatherMqttEndpoint, ...] = (
     GrainfatherMqttEndpoint(PRIMARY_MQTT_BROKER, 8883, True),
-    GrainfatherMqttEndpoint(PRIMARY_MQTT_BROKER, 1883, False),
     GrainfatherMqttEndpoint(SECONDARY_MQTT_BROKER, 8883, True),
-    GrainfatherMqttEndpoint(SECONDARY_MQTT_BROKER, 1883, False),
 )
 
 
@@ -82,6 +82,7 @@ class GrainfatherEspMqttSubscriber:
         self._stop = asyncio.Event()
         self._task: asyncio.Task[None] | None = None
         self._client_id = f"ha-gf-{secrets.token_hex(4)}"
+        self._telemetry_refresh_due_at: dict[str, float] = {}
 
     @property
     def running(self) -> bool:
@@ -147,6 +148,7 @@ class GrainfatherEspMqttSubscriber:
                 pass
 
     async def _connect_and_listen(self, endpoint: GrainfatherMqttEndpoint) -> None:
+        self._telemetry_refresh_due_at.clear()
         ssl_context = ssl.create_default_context() if endpoint.use_tls else None
 
         async with asyncio.timeout(12):
@@ -234,12 +236,17 @@ class GrainfatherEspMqttSubscriber:
             )
 
             while not self._stop.is_set():
+                if await self._send_due_telemetry_keepalives(writer):
+                    continue
+
                 try:
                     packet = await asyncio.wait_for(
                         _read_packet(reader),
-                        timeout=_MQTT_IDLE_BEFORE_PING_SECONDS,
+                        timeout=self._next_read_timeout(),
                     )
                 except TimeoutError:
+                    if await self._send_due_telemetry_keepalives(writer):
+                        continue
                     writer.write(b"\xc0\x00")  # MQTT PINGREQ, not PUBLISH.
                     await writer.drain()
                     packet = await asyncio.wait_for(
@@ -249,6 +256,7 @@ class GrainfatherEspMqttSubscriber:
 
                 await self._handle_packet(writer, *packet)
         finally:
+            self._telemetry_refresh_due_at.clear()
             writer.close()
             with suppress(Exception):
                 await writer.wait_closed()
@@ -284,12 +292,15 @@ class GrainfatherEspMqttSubscriber:
             return
 
         chip_id, topic_type = parse_device_topic(topic)
-        if topic_type == "status" and state.device_online is True:
-            await self._send_telemetry_keepalive(
-                writer,
-                chip_id,
-                ESP_INITIAL_SUBSCRIPTION_SECONDS,
-            )
+        if topic_type == "status":
+            if state.device_online is True:
+                await self._send_telemetry_keepalive(
+                    writer,
+                    chip_id,
+                    ESP_INITIAL_SUBSCRIPTION_SECONDS,
+                )
+            else:
+                self._telemetry_refresh_due_at.pop(chip_id, None)
         elif (
             topic_type == "events"
             and state.event is not None
@@ -302,6 +313,40 @@ class GrainfatherEspMqttSubscriber:
                 ESP_REFRESH_SUBSCRIPTION_SECONDS,
             )
 
+    def _next_read_timeout(self) -> float:
+        """Wake before the next telemetry refresh or normal MQTT ping."""
+        if not self._telemetry_refresh_due_at:
+            return _MQTT_IDLE_BEFORE_PING_SECONDS
+
+        loop = asyncio.get_running_loop()
+        next_due = min(self._telemetry_refresh_due_at.values())
+        return max(
+            0.1,
+            min(_MQTT_IDLE_BEFORE_PING_SECONDS, next_due - loop.time()),
+        )
+
+    async def _send_due_telemetry_keepalives(
+        self,
+        writer: asyncio.StreamWriter,
+    ) -> bool:
+        """Refresh active controller telemetry before subscription expiry."""
+        if not self._telemetry_refresh_due_at:
+            return False
+
+        now = asyncio.get_running_loop().time()
+        due_chip_ids = [
+            chip_id
+            for chip_id, due_at in self._telemetry_refresh_due_at.items()
+            if due_at <= now
+        ]
+        for chip_id in due_chip_ids:
+            await self._send_telemetry_keepalive(
+                writer,
+                chip_id,
+                ESP_REFRESH_SUBSCRIPTION_SECONDS,
+            )
+        return bool(due_chip_ids)
+
     async def _send_telemetry_keepalive(
         self,
         writer: asyncio.StreamWriter,
@@ -312,6 +357,14 @@ class GrainfatherEspMqttSubscriber:
         writer.write(packet)
         await writer.drain()
         self._runtime_store.mark_telemetry_keepalive(chip_id, seconds)
+        refresh_delay = (
+            _MQTT_INITIAL_TELEMETRY_REFRESH_DELAY_SECONDS
+            if seconds == ESP_INITIAL_SUBSCRIPTION_SECONDS
+            else _MQTT_TELEMETRY_REFRESH_INTERVAL_SECONDS
+        )
+        self._telemetry_refresh_due_at[chip_id] = (
+            asyncio.get_running_loop().time() + refresh_delay
+        )
         self._on_update()
         _LOGGER.debug(
             "Refreshed Grainfather ESP telemetry subscription for %s to %ss",
