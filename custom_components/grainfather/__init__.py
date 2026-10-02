@@ -466,6 +466,13 @@ def _async_register_services(hass: HomeAssistant) -> None:
             except (ConnectionError, TimeoutError, ValueError) as err:
                 raise HomeAssistantError(str(err)) from err
 
+        hass.services.async_register(
+            DOMAIN,
+            SERVICE_SET_CONTROLLER_TARGET_TEMPERATURE,
+            async_handle_set_controller_target_temperature,
+            schema=SET_CONTROLLER_TARGET_TEMPERATURE_SCHEMA,
+        )
+
     if not hass.services.has_service(DOMAIN, SERVICE_ADJUST_CURRENT_STEP_TEMPERATURE):
 
         async def async_handle_adjust_current_step_temperature(service_call) -> None:
