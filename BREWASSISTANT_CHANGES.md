@@ -4,6 +4,37 @@ Branch: `brewassistant-grainfather`
 Upstream: `fidley/grainfather_integration:main`  
 Initial upstream base: `f57106cb0f126b387257d47ad6a9d12e7f02b5c7`
 
+
+## Current verified baseline — 2026-10-02
+
+Current BrewAssistant release: **v0.1.5-ba.8**.
+
+Field-verified on the current ESP-linked GF30:
+
+- TLS MQTT on `mqtt.grainfather.com:8883`;
+- live temperature/target/heating/cooling/controller state without opening the app;
+- proactive command 23 telemetry keepalive;
+- fresh MQTT precedence with REST/history fallback;
+- field-captured target command `{"command":0,"value":"21.00"}`;
+- supervised target service with explicit confirmation and fresh MQTT readback;
+- live GF30 sensor/binary-sensor entity coverage;
+- Home Assistant async-safe cached TLS context.
+
+Current outbound MQTT boundary is exactly:
+
+- command 0 — supervised target temperature;
+- command 23 — telemetry keepalive (15/120);
+- all other controller writes unavailable.
+
+Important diagnostics caveat:
+
+- firmware/RSSI/OTA/session fields are optional controller observations and may be
+  null/unknown;
+- a null/unknown OTA field must **not** be interpreted as an available firmware update;
+- `MQTT Event Subscription Value` is diagnostic raw data and is not treated as a
+  countdown because its exact semantics remain unverified.
+
+
 This branch carries BrewAssistant-oriented Grainfather integration work while the fork's
 `main` remains an upstream-tracking branch.
 
