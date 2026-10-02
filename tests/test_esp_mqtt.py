@@ -15,15 +15,13 @@ from custom_components.grainfather.esp_runtime import (
 )
 
 
-def test_default_endpoints_prefer_tls_then_plaintext_fallback() -> None:
+def test_default_endpoints_are_tls_only() -> None:
     assert [
         (endpoint.hostname, endpoint.port, endpoint.use_tls)
         for endpoint in DEFAULT_MQTT_ENDPOINTS
     ] == [
         (PRIMARY_MQTT_BROKER, 8883, True),
-        (PRIMARY_MQTT_BROKER, 1883, False),
         (SECONDARY_MQTT_BROKER, 8883, True),
-        (SECONDARY_MQTT_BROKER, 1883, False),
     ]
 
 
