@@ -271,3 +271,49 @@ def test_event_freshness_tracks_events_not_other_topics() -> None:
     store.ingest("devices/ABC123/status", "true", received_at=status_at)
     assert state.last_message_at == status_at
     assert state.last_event_at == event_at
+
+
+
+def test_command_23_echo_is_ignored_by_passive_observer() -> None:
+    store = GrainfatherEspRuntimeStore()
+    observed_at = datetime(2026, 10, 2, 19, 0, tzinfo=UTC)
+
+    store.observe_command(
+        "ABC123",
+        '{"command":23,"value":"120"}',
+        observed_at=observed_at,
+    )
+
+    assert store.get("ABC123") is None
+
+
+def test_non_keepalive_command_is_observed_without_advancing_telemetry() -> None:
+    store = GrainfatherEspRuntimeStore()
+    observed_at = datetime(2026, 10, 2, 19, 1, tzinfo=UTC)
+
+    result = store.ingest(
+        "devices/ABC123/command",
+        '{"command":42,"value":"18.5"}',
+        received_at=observed_at,
+    )
+
+    assert result is None
+    state = store.get("ABC123")
+    assert state is not None
+    assert state.last_message_at is None
+    assert state.last_event_at is None
+    assert state.observed_external_command_at == observed_at
+    assert state.observed_external_command_id == 42
+    assert state.observed_external_command_value == "18.5"
+    assert state.observed_external_command_payload == (
+        '{"command":42,"value":"18.5"}'
+    )
+    assert state.observed_external_command_count == 1
+
+
+def test_malformed_command_observation_is_ignored() -> None:
+    store = GrainfatherEspRuntimeStore()
+
+    store.observe_command("ABC123", b"not-json")
+
+    assert store.get("ABC123") is None
