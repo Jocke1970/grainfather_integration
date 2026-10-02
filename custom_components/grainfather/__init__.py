@@ -69,6 +69,7 @@ from .api import brew_session_unique_fragment
 
 PLATFORMS: list[Platform] = [
     Platform.SENSOR,
+    Platform.BINARY_SENSOR,
     Platform.NUMBER,
     Platform.SELECT,
 ]
