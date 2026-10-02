@@ -10,7 +10,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import UnitOfTemperature
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.device_registry import DeviceEntryType
-from homeassistant.helpers.entity import DeviceInfo
+from homeassistant.helpers.entity import DeviceInfo, EntityCategory
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
@@ -44,6 +44,39 @@ def _calc_abv(og: float | None, fg: float | None) -> float | None:
         return None
     return round((og - fg) * 131.25, 2)
 
+
+LIVE_CONTROLLER_SENSORS: tuple[SensorEntityDescription, ...] = (
+    SensorEntityDescription(
+        key="controller_rssi",
+        name="Controller RSSI",
+        native_unit_of_measurement="dBm",
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    SensorEntityDescription(
+        key="controller_hysteresis",
+        name="Controller Hysteresis",
+        device_class=SensorDeviceClass.TEMPERATURE,
+        native_unit_of_measurement=UnitOfTemperature.CELSIUS,
+        suggested_display_precision=1,
+    ),
+    SensorEntityDescription(
+        key="controller_temperature_offset",
+        name="Controller Temperature Offset",
+        device_class=SensorDeviceClass.TEMPERATURE,
+        native_unit_of_measurement=UnitOfTemperature.CELSIUS,
+        suggested_display_precision=1,
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    SensorEntityDescription(key="control_mode", name="Control Mode Code", entity_category=EntityCategory.DIAGNOSTIC),
+    SensorEntityDescription(key="controller_units", name="Units Code", entity_category=EntityCategory.DIAGNOSTIC),
+    SensorEntityDescription(key="firmware_version", name="Firmware Version", entity_category=EntityCategory.DIAGNOSTIC),
+    SensorEntityDescription(key="controller_error_code", name="Controller Error Code", entity_category=EntityCategory.DIAGNOSTIC),
+    SensorEntityDescription(key="controller_ota_status", name="OTA Status Code", entity_category=EntityCategory.DIAGNOSTIC),
+    SensorEntityDescription(key="session_id", name="Controller Session ID", entity_category=EntityCategory.DIAGNOSTIC),
+    SensorEntityDescription(key="session_stage", name="Controller Session Stage", entity_category=EntityCategory.DIAGNOSTIC),
+    SensorEntityDescription(key="stage_end_time", name="Controller Stage End Time", entity_category=EntityCategory.DIAGNOSTIC),
+    SensorEntityDescription(key="live_mqtt_event_subscription_time", name="MQTT Event Subscription Value", entity_category=EntityCategory.DIAGNOSTIC),
+)
 
 SESSION_SENSORS: tuple[GrainfatherSessionSensorDescription, ...] = (
     GrainfatherSessionSensorDescription(
