@@ -467,7 +467,6 @@ def _async_register_services(hass: HomeAssistant) -> None:
                 raise HomeAssistantError(str(err)) from err
 
     if not hass.services.has_service(DOMAIN, SERVICE_ADJUST_CURRENT_STEP_TEMPERATURE):
-    if not hass.services.has_service(DOMAIN, SERVICE_ADJUST_CURRENT_STEP_TEMPERATURE):
 
         async def async_handle_adjust_current_step_temperature(service_call) -> None:
             coordinator = _get_coordinator(hass, service_call.data.get(CONF_ENTRY_ID))
