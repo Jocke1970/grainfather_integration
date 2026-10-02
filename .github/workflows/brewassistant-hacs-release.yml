@@ -74,12 +74,14 @@ jobs:
           - proactive telemetry refresh before the 120-second subscription expires
           - TLS-only MQTT transport on port 8883; plaintext 1883 fallback removed
           - command-topic echoes excluded from inbound telemetry freshness
-          - passive observation of non-23 app commands for target-protocol discovery
-          - command observations do not alter telemetry freshness and never publish
+          - passive observation of non-23 app commands for protocol diagnostics
+          - command observations do not alter telemetry freshness
           - fresh MQTT events take precedence with automatic REST/history fallback
-          - only command 23 with values 15/120 may be published
-          - no target, control-mode, heater, cooling or profile write path
-          - safe connection diagnostics and REST/history fallback
+          - field-verified command 0 supervised target write with confirm + MQTT readback
+          - command 23 remains limited to telemetry values 15/120
+          - live GF30 controller sensors and binary sensors
+          - no heater, cooling, control-mode, profile, hysteresis or calibration write path
+          - safe connection/write diagnostics and REST/history fallback
 
           This is a BrewAssistant test build, not an upstream fidley release.
           EOF
