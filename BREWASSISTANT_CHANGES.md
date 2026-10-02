@@ -166,3 +166,25 @@ requirements that are addressed in `ba.5`:
 The outbound write boundary is unchanged: only command 23 with values 15/120
 is permitted. There is still no target-temperature, mode, heater, cooling or
 profile write path.
+
+
+## Phase 5 — passive target-command discovery (v0.1.5-ba.6)
+
+No target-temperature write is implemented in this release.
+
+The MQTT wildcard subscription can observe commands published by another client,
+such as the official Grainfather app. To identify the modern GF30 target protocol
+without guessing, the integration now passively records non-keepalive command
+observations:
+
+- command 23 telemetry keepalives are explicitly ignored by the observer;
+- command observations never advance telemetry/event freshness;
+- only bounded diagnostic fields are exposed: timestamp, command id, value,
+  compact payload and observation count;
+- malformed command payloads are ignored safely;
+- the observer never publishes or executes the observed command.
+
+This release is intended for a controlled field capture: with Home Assistant
+connected, change only the GF30 target temperature once in the official app and
+inspect the resulting observer attributes. The captured command will then be
+used to design a separately bounded supervised target-write path with readback.
