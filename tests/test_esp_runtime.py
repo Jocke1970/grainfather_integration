@@ -1,8 +1,10 @@
 import json
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
 from custom_components.grainfather.esp_runtime import (
+    ESP_EVENT_FRESHNESS_SECONDS,
     ESP_INITIAL_SUBSCRIPTION_SECONDS,
     ESP_REFRESH_SUBSCRIPTION_SECONDS,
     ESP_SUBSCRIPTION_TIME_COMMAND,
@@ -11,6 +13,8 @@ from custom_components.grainfather.esp_runtime import (
     GrainfatherEspRuntimeStore,
     command_topic,
     device_topic,
+    event_age_seconds,
+    event_is_fresh,
     mqtt_credentials,
     mqtt_password,
     mqtt_username,
@@ -228,3 +232,42 @@ def test_runtime_store_ingests_read_only_topics() -> None:
     assert state.telemetry_keepalive_seconds == 120
     assert state.telemetry_keepalive_count == 1
     assert state.telemetry_keepalive_last_sent_at is not None
+
+
+
+def test_command_echo_does_not_advance_inbound_freshness() -> None:
+    store = GrainfatherEspRuntimeStore()
+    observed_at = datetime(2026, 10, 2, 16, 0, tzinfo=UTC)
+
+    result = store.ingest(
+        "devices/ABC123/command",
+        '{"command":23,"value":"120"}',
+        received_at=observed_at,
+    )
+
+    assert result is None
+    state = store.get("ABC123")
+    assert state is None
+
+
+def test_event_freshness_tracks_events_not_other_topics() -> None:
+    store = GrainfatherEspRuntimeStore()
+    event_at = datetime(2026, 10, 2, 16, 0, tzinfo=UTC)
+    later = event_at + timedelta(seconds=ESP_EVENT_FRESHNESS_SECONDS - 1)
+    stale = event_at + timedelta(seconds=ESP_EVENT_FRESHNESS_SECONDS + 1)
+
+    state = store.ingest(
+        "devices/ABC123/events",
+        '{"data":{"temp":23,"target":22,"subTime":120}}',
+        received_at=event_at,
+    )
+    assert state is not None
+    assert state.last_event_at == event_at
+    assert event_age_seconds(state, now=later) == ESP_EVENT_FRESHNESS_SECONDS - 1
+    assert event_is_fresh(state, now=later) is True
+    assert event_is_fresh(state, now=stale) is False
+
+    status_at = stale + timedelta(seconds=30)
+    store.ingest("devices/ABC123/status", "true", received_at=status_at)
+    assert state.last_message_at == status_at
+    assert state.last_event_at == event_at
