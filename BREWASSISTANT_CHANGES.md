@@ -229,3 +229,15 @@ session/stage fields.
 
 No heater, cooling, control-mode, profile, hysteresis, calibration, OTA or
 session write path is implemented.
+
+
+## Phase 7 — async-safe MQTT TLS setup (v0.1.5-ba.8)
+
+Home Assistant 2026 / Python 3.14 reports `ssl.create_default_context()` as a
+blocking event-loop operation because loading default certificate paths performs
+disk I/O. The Grainfather MQTT client now uses Home Assistant's cached generic
+SSL helper from `homeassistant.util.ssl.client_context`.
+
+This removes the blocking `load_default_certs` /
+`set_default_verify_paths` calls from the integration event loop while keeping
+the same TLS-only MQTT transport and certificate verification behavior.
