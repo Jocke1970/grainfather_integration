@@ -15,6 +15,7 @@ MQTT_SUBSCRIPTION_SUFFIXES = ("#", "meta", "status", "config")
 ESP_SUBSCRIPTION_TIME_COMMAND = 23
 ESP_INITIAL_SUBSCRIPTION_SECONDS = 15
 ESP_REFRESH_SUBSCRIPTION_SECONDS = 120
+ESP_EVENT_FRESHNESS_SECONDS = 180
 
 
 def mqtt_username(user_id: str | int) -> str:
@@ -238,10 +239,34 @@ class GrainfatherEspLiveState:
     profiles: Any = None
     last_topic: str | None = None
     last_message_at: datetime | None = None
+    last_event_at: datetime | None = None
     last_connection_error: str | None = None
     telemetry_keepalive_last_sent_at: datetime | None = None
     telemetry_keepalive_seconds: int | None = None
     telemetry_keepalive_count: int = 0
+
+
+def event_age_seconds(
+    state: GrainfatherEspLiveState | None,
+    *,
+    now: datetime | None = None,
+) -> float | None:
+    """Return age of the latest controller events payload in seconds."""
+    if state is None or state.last_event_at is None:
+        return None
+    reference = now or datetime.now(UTC)
+    return max(0.0, (reference - state.last_event_at).total_seconds())
+
+
+def event_is_fresh(
+    state: GrainfatherEspLiveState | None,
+    *,
+    now: datetime | None = None,
+    max_age_seconds: int = ESP_EVENT_FRESHNESS_SECONDS,
+) -> bool:
+    """Return whether live controller events are fresh enough to win over REST."""
+    age = event_age_seconds(state, now=now)
+    return age is not None and age <= max_age_seconds
 
 
 @dataclass(slots=True)
@@ -316,11 +341,19 @@ class GrainfatherEspRuntimeStore:
         payload: str | bytes,
         *,
         received_at: datetime | None = None,
-    ) -> GrainfatherEspLiveState:
+    ) -> GrainfatherEspLiveState | None:
         chip_id, topic_type = parse_device_topic(topic)
+
+        # The wildcard subscription also receives our own bounded /command
+        # publish. It is outbound control-plane echo, not controller telemetry,
+        # and must never advance inbound freshness timestamps.
+        if topic_type == "command":
+            return None
+
         state = self.ensure(chip_id)
+        observed_at = received_at or datetime.now(UTC)
         state.last_topic = topic
-        state.last_message_at = received_at or datetime.now(UTC)
+        state.last_message_at = observed_at
 
         if topic_type == "status":
             state.device_online = parse_status_payload(payload)
@@ -330,6 +363,7 @@ class GrainfatherEspRuntimeStore:
             state.config = _json_object(payload)
         elif topic_type == "events":
             state.event = parse_event_payload(payload)
+            state.last_event_at = observed_at
         elif topic_type == "profiles":
             state.profiles = json.loads(_decode_payload(payload))
 
