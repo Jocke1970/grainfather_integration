@@ -42,6 +42,8 @@ from .const import (
     SERVICE_ADVANCE_TO_NEXT_FERMENTATION_STEP,
     SERVICE_CLEAR_FERMENTATION_STEP_FINISH_TEMPERATURE,
     CONF_BREW_SESSION_ID,
+    CONF_CONFIRM,
+    CONF_DEVICE_ID,
     CONF_DURATION_MINUTES,
     CONF_EMAIL,
     CONF_ENTRY_ID,
@@ -55,6 +57,7 @@ from .const import (
     CONF_TEMPERATURE,
     DOMAIN,
     SERVICE_SET_BREW_SESSION_STATUS,
+    SERVICE_SET_CONTROLLER_TARGET_TEMPERATURE,
     SERVICE_SET_FERMENTATION_STEP_DURATION,
     SERVICE_SET_FERMENTATION_STEPS,
     DEFAULT_INCLUDE_COMPLETED_SESSIONS,
@@ -151,6 +154,18 @@ ADVANCE_TO_NEXT_FERMENTATION_STEP_SCHEMA = vol.Schema(
         vol.Optional(CONF_ENTRY_ID): cv.string,
         vol.Optional(CONF_BREW_SESSION_ID): vol.Coerce(int),
         vol.Optional(CONF_RECIPE_ID): vol.Coerce(int),
+    }
+)
+
+SET_CONTROLLER_TARGET_TEMPERATURE_SCHEMA = vol.Schema(
+    {
+        vol.Optional(CONF_ENTRY_ID): cv.string,
+        vol.Required(CONF_DEVICE_ID): vol.Coerce(int),
+        vol.Required(CONF_TEMPERATURE): vol.All(
+            vol.Coerce(float),
+            vol.Range(min=0.0, max=40.0),
+        ),
+        vol.Required(CONF_CONFIRM): cv.boolean,
     }
 )
 
@@ -391,6 +406,9 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             hass.services.async_remove(DOMAIN, SERVICE_ADJUST_CURRENT_STEP_DURATION)
             hass.services.async_remove(DOMAIN, SERVICE_ADVANCE_TO_NEXT_FERMENTATION_STEP)
             hass.services.async_remove(DOMAIN, SERVICE_SET_BREW_SESSION_STATUS)
+            hass.services.async_remove(
+                DOMAIN, SERVICE_SET_CONTROLLER_TARGET_TEMPERATURE
+            )
             hass.services.async_remove(DOMAIN, SERVICE_SET_FERMENTATION_STEPS)
             hass.services.async_remove(DOMAIN, SERVICE_SET_FERMENTATION_STEP_DURATION)
             hass.services.async_remove(
@@ -400,6 +418,54 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 
 def _async_register_services(hass: HomeAssistant) -> None:
+    if not hass.services.has_service(
+        DOMAIN, SERVICE_SET_CONTROLLER_TARGET_TEMPERATURE
+    ):
+
+        async def async_handle_set_controller_target_temperature(service_call) -> None:
+            if service_call.data.get(CONF_CONFIRM) is not True:
+                raise HomeAssistantError(
+                    "Controller target write requires confirm: true"
+                )
+
+            coordinator = _get_coordinator(
+                hass,
+                service_call.data.get(CONF_ENTRY_ID),
+            )
+            device_id = int(service_call.data[CONF_DEVICE_ID])
+            device = next(
+                (
+                    item
+                    for item in coordinator.data.fermentation_devices
+                    if item.device_id == device_id
+                ),
+                None,
+            )
+            if device is None:
+                raise HomeAssistantError(
+                    f"Fermentation device {device_id} not found"
+                )
+            if not device.esp_chip_id:
+                raise HomeAssistantError(
+                    "Fermentation device has no ESP controller"
+                )
+
+            subscriber = coordinator.esp_mqtt_subscriber
+            if subscriber is None:
+                raise HomeAssistantError(
+                    "Grainfather ESP MQTT subscriber is not available"
+                )
+
+            target = float(service_call.data[CONF_TEMPERATURE])
+            try:
+                await subscriber.async_set_target_temperature(
+                    device.esp_chip_id,
+                    target,
+                )
+            except (ConnectionError, TimeoutError, ValueError) as err:
+                raise HomeAssistantError(str(err)) from err
+
+    if not hass.services.has_service(DOMAIN, SERVICE_ADJUST_CURRENT_STEP_TEMPERATURE):
     if not hass.services.has_service(DOMAIN, SERVICE_ADJUST_CURRENT_STEP_TEMPERATURE):
 
         async def async_handle_adjust_current_step_temperature(service_call) -> None:
