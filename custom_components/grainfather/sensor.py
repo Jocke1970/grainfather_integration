@@ -280,6 +280,23 @@ def _controller_runtime_metadata(
             "live_mqtt_last_error": (
                 live.last_connection_error if live else None
             ),
+            "live_mqtt_observed_external_command_at": (
+                live.observed_external_command_at.isoformat()
+                if live and live.observed_external_command_at
+                else None
+            ),
+            "live_mqtt_observed_external_command_id": (
+                live.observed_external_command_id if live else None
+            ),
+            "live_mqtt_observed_external_command_value": (
+                live.observed_external_command_value if live else None
+            ),
+            "live_mqtt_observed_external_command_payload": (
+                live.observed_external_command_payload if live else None
+            ),
+            "live_mqtt_observed_external_command_count": (
+                live.observed_external_command_count if live else 0
+            ),
             "live_mqtt_telemetry_keepalive_last_sent_at": (
                 live.telemetry_keepalive_last_sent_at.isoformat()
                 if live and live.telemetry_keepalive_last_sent_at
