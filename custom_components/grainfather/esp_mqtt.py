@@ -3,10 +3,11 @@ from __future__ import annotations
 import asyncio
 import logging
 import secrets
-import ssl
 from collections.abc import Callable
 from contextlib import suppress
 from dataclasses import dataclass
+
+from homeassistant.util.ssl import client_context
 
 from .esp_runtime import (
     ESP_INITIAL_SUBSCRIPTION_SECONDS,
@@ -157,7 +158,7 @@ class GrainfatherEspMqttSubscriber:
 
     async def _connect_and_listen(self, endpoint: GrainfatherMqttEndpoint) -> None:
         self._telemetry_refresh_due_at.clear()
-        ssl_context = ssl.create_default_context() if endpoint.use_tls else None
+        ssl_context = client_context() if endpoint.use_tls else None
 
         async with asyncio.timeout(12):
             reader, writer = await asyncio.open_connection(
