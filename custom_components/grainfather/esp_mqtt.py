@@ -11,6 +11,8 @@ from dataclasses import dataclass
 from .esp_runtime import (
     ESP_INITIAL_SUBSCRIPTION_SECONDS,
     ESP_REFRESH_SUBSCRIPTION_SECONDS,
+    ESP_TARGET_TEMPERATURE_MAX_C,
+    ESP_TARGET_TEMPERATURE_MIN_C,
     PRIMARY_MQTT_BROKER,
     SECONDARY_MQTT_BROKER,
     GrainfatherEspRuntimeStore,
@@ -18,6 +20,7 @@ from .esp_runtime import (
     mqtt_credentials,
     parse_device_topic,
     subscription_topics,
+    target_temperature_payload,
     telemetry_keepalive_payload,
 )
 
@@ -29,6 +32,8 @@ _MQTT_PING_TIMEOUT_SECONDS = 15
 _MQTT_RECONNECT_DELAY_SECONDS = 30
 _MQTT_INITIAL_TELEMETRY_REFRESH_DELAY_SECONDS = 10
 _MQTT_TELEMETRY_REFRESH_INTERVAL_SECONDS = 90
+_TARGET_WRITE_READBACK_TIMEOUT_SECONDS = 10
+_TARGET_WRITE_POLL_INTERVAL_SECONDS = 0.1
 
 
 @dataclass(frozen=True, slots=True)
@@ -54,9 +59,10 @@ DEFAULT_MQTT_ENDPOINTS: tuple[GrainfatherMqttEndpoint, ...] = (
 class GrainfatherEspMqttSubscriber:
     """MQTT 3.1.1 telemetry client for Grainfather ESP devices.
 
-    Outbound MQTT is structurally limited to command 23 (ESP subscription time),
-    which mirrors the Grainfather app's telemetry activation/refresh handshake.
-    There is no generic command publisher and no target/mode/control write path.
+    Outbound MQTT is structurally limited to two field-verified commands:
+    command 23 for telemetry subscription maintenance and command 0 for an
+    explicitly requested target temperature. There is no generic command
+    publisher and no heater/cooling/mode/profile write path.
     """
 
     def __init__(
@@ -83,6 +89,8 @@ class GrainfatherEspMqttSubscriber:
         self._task: asyncio.Task[None] | None = None
         self._client_id = f"ha-gf-{secrets.token_hex(4)}"
         self._telemetry_refresh_due_at: dict[str, float] = {}
+        self._active_writer: asyncio.StreamWriter | None = None
+        self._write_lock = asyncio.Lock()
 
     @property
     def running(self) -> bool:
@@ -226,6 +234,7 @@ class GrainfatherEspMqttSubscriber:
                 list(self._chip_ids),
                 None,
             )
+            self._active_writer = writer
             self._on_update()
             _LOGGER.info(
                 "Grainfather ESP MQTT subscribed via %s to %d topic(s) "
@@ -257,6 +266,8 @@ class GrainfatherEspMqttSubscriber:
                 await self._handle_packet(writer, *packet)
         finally:
             self._telemetry_refresh_due_at.clear()
+            if self._active_writer is writer:
+                self._active_writer = None
             writer.close()
             with suppress(Exception):
                 await writer.wait_closed()
@@ -347,6 +358,80 @@ class GrainfatherEspMqttSubscriber:
             )
         return bool(due_chip_ids)
 
+    async def async_set_target_temperature(
+        self,
+        chip_id: str,
+        temperature_c: float,
+    ) -> float:
+        """Set GF30 target and require a fresh MQTT readback before success."""
+        normalized_chip_id = chip_id.strip().casefold()
+        if normalized_chip_id not in self._chip_ids:
+            raise ValueError("Unknown Grainfather ESP chip id")
+
+        target = float(temperature_c)
+        if not ESP_TARGET_TEMPERATURE_MIN_C <= target <= ESP_TARGET_TEMPERATURE_MAX_C:
+            raise ValueError(
+                "Target temperature is outside the bounded Grainfather range"
+            )
+
+        writer = self._active_writer
+        state = self._runtime_store.get(normalized_chip_id)
+        if (
+            writer is None
+            or state is None
+            or not state.broker_connected
+            or not state.mqtt_subscribed
+            or state.device_online is not True
+        ):
+            raise ConnectionError("Grainfather controller MQTT is not ready")
+
+        previous_event_at = state.last_event_at
+        packet = _build_target_temperature_packet(normalized_chip_id, target)
+        self._runtime_store.mark_target_write_requested(normalized_chip_id, target)
+        self._on_update()
+
+        async with self._write_lock:
+            writer.write(packet)
+            await writer.drain()
+
+        deadline = asyncio.get_running_loop().time() + _TARGET_WRITE_READBACK_TIMEOUT_SECONDS
+        while asyncio.get_running_loop().time() < deadline:
+            await asyncio.sleep(_TARGET_WRITE_POLL_INTERVAL_SECONDS)
+            state = self._runtime_store.get(normalized_chip_id)
+            if state is None or state.event is None or state.last_event_at is None:
+                continue
+            if previous_event_at is not None and state.last_event_at <= previous_event_at:
+                continue
+            readback = state.event.target_temperature
+            if readback is None:
+                continue
+            if abs(readback - target) <= 0.01:
+                self._runtime_store.mark_target_write_result(
+                    normalized_chip_id,
+                    "verified",
+                    readback_value=readback,
+                    readback_at=state.last_event_at,
+                )
+                self._on_update()
+                return readback
+
+            self._runtime_store.mark_target_write_result(
+                normalized_chip_id,
+                "mismatch",
+                readback_value=readback,
+                readback_at=state.last_event_at,
+            )
+            self._on_update()
+
+        self._runtime_store.mark_target_write_result(
+            normalized_chip_id,
+            "timeout",
+        )
+        self._on_update()
+        raise TimeoutError(
+            f"GF30 target {target:.2f} °C was not verified by fresh MQTT readback"
+        )
+
     async def _send_telemetry_keepalive(
         self,
         writer: asyncio.StreamWriter,
@@ -354,8 +439,9 @@ class GrainfatherEspMqttSubscriber:
         seconds: int,
     ) -> None:
         packet = _build_telemetry_keepalive_packet(chip_id, seconds)
-        writer.write(packet)
-        await writer.drain()
+        async with self._write_lock:
+            writer.write(packet)
+            await writer.drain()
         self._runtime_store.mark_telemetry_keepalive(chip_id, seconds)
         refresh_delay = (
             _MQTT_INITIAL_TELEMETRY_REFRESH_DELAY_SECONDS
@@ -422,6 +508,14 @@ def _build_connect_packet(
     )
     remaining = protocol + payload
     return b"\x10" + _encode_remaining_length(len(remaining)) + remaining
+
+
+def _build_target_temperature_packet(chip_id: str, temperature_c: float) -> bytes:
+    """Build the only approved supervised controller target PUBLISH packet."""
+    topic = command_topic(chip_id)
+    payload = target_temperature_payload(temperature_c).encode()
+    body = _encode_utf8(topic) + payload
+    return b"\x30" + _encode_remaining_length(len(body)) + body
 
 
 def _build_telemetry_keepalive_packet(chip_id: str, seconds: int) -> bytes:
