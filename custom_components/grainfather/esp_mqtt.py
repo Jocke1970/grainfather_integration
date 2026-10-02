@@ -394,13 +394,19 @@ class GrainfatherEspMqttSubscriber:
             writer.write(packet)
             await writer.drain()
 
-        deadline = asyncio.get_running_loop().time() + _TARGET_WRITE_READBACK_TIMEOUT_SECONDS
+        deadline = (
+            asyncio.get_running_loop().time()
+            + _TARGET_WRITE_READBACK_TIMEOUT_SECONDS
+        )
         while asyncio.get_running_loop().time() < deadline:
             await asyncio.sleep(_TARGET_WRITE_POLL_INTERVAL_SECONDS)
             state = self._runtime_store.get(normalized_chip_id)
             if state is None or state.event is None or state.last_event_at is None:
                 continue
-            if previous_event_at is not None and state.last_event_at <= previous_event_at:
+            if (
+                previous_event_at is not None
+                and state.last_event_at <= previous_event_at
+            ):
                 continue
             readback = state.event.target_temperature
             if readback is None:
