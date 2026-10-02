@@ -16,6 +16,7 @@ ESP_SUBSCRIPTION_TIME_COMMAND = 23
 ESP_INITIAL_SUBSCRIPTION_SECONDS = 15
 ESP_REFRESH_SUBSCRIPTION_SECONDS = 120
 ESP_EVENT_FRESHNESS_SECONDS = 180
+ESP_MAX_OBSERVED_COMMAND_PAYLOAD_CHARS = 512
 
 
 def mqtt_username(user_id: str | int) -> str:
@@ -244,6 +245,11 @@ class GrainfatherEspLiveState:
     telemetry_keepalive_last_sent_at: datetime | None = None
     telemetry_keepalive_seconds: int | None = None
     telemetry_keepalive_count: int = 0
+    observed_external_command_at: datetime | None = None
+    observed_external_command_id: int | None = None
+    observed_external_command_value: Any = None
+    observed_external_command_payload: str | None = None
+    observed_external_command_count: int = 0
 
 
 def event_age_seconds(
@@ -335,6 +341,38 @@ class GrainfatherEspRuntimeStore:
         state.telemetry_keepalive_seconds = seconds
         state.telemetry_keepalive_count += 1
 
+    def observe_command(
+        self,
+        chip_id: str,
+        payload: str | bytes,
+        *,
+        observed_at: datetime | None = None,
+    ) -> None:
+        """Passively retain non-keepalive command observations for RE only.
+
+        Command 23 is intentionally ignored because both Home Assistant and the
+        Grainfather app use it for telemetry subscription maintenance. Nothing
+        in this observer publishes or executes a controller command.
+        """
+        try:
+            decoded = _json_object(payload)
+        except (UnicodeDecodeError, json.JSONDecodeError, ValueError, TypeError):
+            return
+
+        command_id = _to_int(decoded.get("command"))
+        if command_id is None or command_id == ESP_SUBSCRIPTION_TIME_COMMAND:
+            return
+
+        state = self.ensure(chip_id)
+        encoded = json.dumps(decoded, separators=(",", ":"), ensure_ascii=False)
+        state.observed_external_command_at = observed_at or datetime.now(UTC)
+        state.observed_external_command_id = command_id
+        state.observed_external_command_value = decoded.get("value")
+        state.observed_external_command_payload = encoded[
+            :ESP_MAX_OBSERVED_COMMAND_PAYLOAD_CHARS
+        ]
+        state.observed_external_command_count += 1
+
     def ingest(
         self,
         topic: str,
@@ -344,10 +382,12 @@ class GrainfatherEspRuntimeStore:
     ) -> GrainfatherEspLiveState | None:
         chip_id, topic_type = parse_device_topic(topic)
 
-        # The wildcard subscription also receives our own bounded /command
-        # publish. It is outbound control-plane echo, not controller telemetry,
-        # and must never advance inbound freshness timestamps.
         if topic_type == "command":
+            self.observe_command(
+                chip_id,
+                payload,
+                observed_at=received_at,
+            )
             return None
 
         state = self.ensure(chip_id)
