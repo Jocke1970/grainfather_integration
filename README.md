@@ -15,7 +15,8 @@ bounded supervised target-temperature write path.
 
 Current development release: **2026.10.0b5**  
 Release label: **2026.10 Beta 5**  
-Includes: **GF30 Supervised Control Card + Controller State enum + compact offline card**
+Includes: **GF30 Supervised Control Card + Controller State enum + compact offline card**  
+Release status: **2026.10.0b5 prerelease candidate validated**
 
 Verified on a real Grainfather GF30 / ESP-linked controller:
 
