@@ -387,8 +387,13 @@ class GrainfatherEspMqttSubscriber:
             raise ConnectionError("Grainfather controller MQTT is not ready")
 
         previous_event_at = state.last_event_at
+        payload = target_temperature_payload(target)
         packet = _build_target_temperature_packet(normalized_chip_id, target)
         self._runtime_store.mark_target_write_requested(normalized_chip_id, target)
+        self._runtime_store.expect_local_command_echo(
+            normalized_chip_id,
+            payload,
+        )
         self._on_update()
 
         async with self._write_lock:
