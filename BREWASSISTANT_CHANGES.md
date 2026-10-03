@@ -7,7 +7,14 @@ Initial upstream base: `f57106cb0f126b387257d47ad6a9d12e7f02b5c7`
 
 ## Current verified baseline — 2026-10-02
 
-Current BrewAssistant release: **v0.1.5-ba.8**.
+Current BrewAssistant release: **2026.10.0b1**.
+
+Versioning transition:
+
+- `v0.1.5-ba.8` is the final release in the original experimental series;
+- `2026.10.0b1` starts the calendar-based beta series;
+- subsequent October betas use `2026.10.0b2`, `2026.10.0b3`, and so on;
+- the intended stable October baseline is `2026.10.0`.
 
 Field-verified on the current ESP-linked GF30:
 
@@ -272,3 +279,24 @@ SSL helper from `homeassistant.util.ssl.client_context`.
 This removes the blocking `load_default_certs` /
 `set_default_verify_paths` calls from the integration event loop while keeping
 the same TLS-only MQTT transport and certificate verification behavior.
+
+
+## Phase 8 — calendar-version beta baseline (2026.10.0b1)
+
+This release starts the new BrewAssistant calendar-versioning scheme.
+
+Included baseline maintenance:
+
+- version changes from the experimental `0.1.5-ba.x` sequence to
+  `2026.10.0b1`;
+- manifest documentation URL now points to
+  `Jocke1970/grainfather_integration`;
+- manifest issue tracker now points to
+  `Jocke1970/grainfather_integration/issues`;
+- README and BrewAssistant development notes are synchronized with the current
+  GF30 MQTT/readback architecture and safety boundary;
+- all functionality from `v0.1.5-ba.8` remains the functional baseline.
+
+No new controller command is introduced by this versioning/metadata release.
+The outbound MQTT boundary remains command 0 for supervised target temperature
+and command 23 for telemetry keepalive only.
