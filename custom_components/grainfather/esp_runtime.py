@@ -408,7 +408,7 @@ class GrainfatherEspRuntimeStore:
         *,
         published_at: datetime | None = None,
     ) -> None:
-        """Remember one locally published command so its wildcard echo is not external."""
+        """Remember a local command so its wildcard echo is not external."""
         state = self.ensure(chip_id)
         state.expected_local_command_echo_at = published_at or datetime.now(UTC)
         state.expected_local_command_echo_payload = payload
