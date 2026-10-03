@@ -98,4 +98,5 @@ jobs:
           gh release create "$TAG" \
             --target "$TARGET_SHA" \
             --title "$RELEASE_TITLE" \
+            --prerelease \
             --notes-file /tmp/release-notes.md
