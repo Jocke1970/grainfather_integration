@@ -26,7 +26,7 @@ from .api import (
 from .const import BREW_SESSION_STATUS_NAME_BY_CODE, DOMAIN
 from .const import CONF_DEFAULT_DENSITY_UNIT, DEFAULT_DENSITY_UNIT
 from .coordinator import GrainfatherDataUpdateCoordinator
-from .esp_runtime import event_age_seconds, event_is_fresh
+from .esp_runtime import controller_operating_state, event_age_seconds, event_is_fresh
 
 _MAX_EXPOSED_BATCH_HISTORY_POINTS = 20
 _MAX_EXPOSED_DEVICE_HISTORY_POINTS = 5
@@ -46,6 +46,21 @@ def _calc_abv(og: float | None, fg: float | None) -> float | None:
 
 
 LIVE_CONTROLLER_SENSORS: tuple[SensorEntityDescription, ...] = (
+    SensorEntityDescription(
+        key="controller_state",
+        name="Controller State",
+        device_class=SensorDeviceClass.ENUM,
+        options=[
+            "idle",
+            "heating",
+            "cooling",
+            "control_inactive",
+            "offline",
+            "mqtt_disconnected",
+            "telemetry_stale",
+            "unknown",
+        ],
+    ),
     SensorEntityDescription(
         key="controller_rssi",
         name="Controller RSSI",
@@ -729,6 +744,8 @@ class GrainfatherFermDeviceLiveSensor(
         meta = live.meta
         key = self.entity_description.key
 
+        if key == "controller_state":
+            return controller_operating_state(live)
         if key == "controller_rssi":
             return event.rssi if event and event.rssi is not None else (meta.rssi if meta else None)
         if key == "controller_hysteresis":
