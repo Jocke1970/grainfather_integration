@@ -2,7 +2,7 @@ import { LitElement, css, html, nothing } from 'https://unpkg.com/lit@3.3.0/inde
 
 const DEFAULT_MIN = 0;
 const DEFAULT_MAX = 40;
-const DEFAULT_STEP = 0.1;
+const DEFAULT_STEP = 0.5;
 
 function _number(value) {
   const parsed = Number(value);
