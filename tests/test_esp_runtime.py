@@ -15,6 +15,7 @@ from custom_components.grainfather.esp_runtime import (
     SECONDARY_MQTT_BROKER,
     GrainfatherEspRuntimeStore,
     command_topic,
+    controller_operating_state,
     device_topic,
     event_age_seconds,
     event_is_fresh,
@@ -419,3 +420,93 @@ def test_expired_echo_expectation_does_not_hide_command() -> None:
     assert state.observed_external_command_value == "23.00"
     assert state.expected_local_command_echo_at is None
     assert state.expected_local_command_echo_payload is None
+
+
+def test_controller_operating_state_prefers_verified_runtime_signals() -> None:
+    store = GrainfatherEspRuntimeStore()
+    now = datetime(2026, 10, 3, 10, 30, tzinfo=UTC)
+    chip_id = "ABC123"
+
+    assert controller_operating_state(None, now=now) == "unknown"
+
+    state = store.ensure(chip_id)
+    assert controller_operating_state(state, now=now) == "mqtt_disconnected"
+
+    state.broker_connected = True
+    state.mqtt_subscribed = True
+    state.device_online = False
+    assert controller_operating_state(state, now=now) == "offline"
+
+    state.device_online = True
+    assert controller_operating_state(state, now=now) == "telemetry_stale"
+
+    store.ingest(
+        f"devices/{chip_id}/events",
+        (
+            '{"data":{"heatStatus":false,"coolStatus":false},'
+            '"settings":{"controlStatus":true}}'
+        ),
+        received_at=now,
+    )
+    state = store.get(chip_id)
+    assert state is not None
+    state.broker_connected = True
+    state.mqtt_subscribed = True
+    state.device_online = True
+    assert controller_operating_state(state, now=now) == "idle"
+
+    store.ingest(
+        f"devices/{chip_id}/events",
+        (
+            '{"data":{"heatStatus":true,"coolStatus":false},'
+            '"settings":{"controlStatus":true}}'
+        ),
+        received_at=now,
+    )
+    assert controller_operating_state(state, now=now) == "heating"
+
+    store.ingest(
+        f"devices/{chip_id}/events",
+        (
+            '{"data":{"heatStatus":false,"coolStatus":true},'
+            '"settings":{"controlStatus":true}}'
+        ),
+        received_at=now,
+    )
+    assert controller_operating_state(state, now=now) == "cooling"
+
+    store.ingest(
+        f"devices/{chip_id}/events",
+        (
+            '{"data":{"heatStatus":false,"coolStatus":false},'
+            '"settings":{"controlStatus":false}}'
+        ),
+        received_at=now,
+    )
+    assert controller_operating_state(state, now=now) == "control_inactive"
+
+
+def test_controller_operating_state_marks_old_events_stale() -> None:
+    store = GrainfatherEspRuntimeStore()
+    received_at = datetime(2026, 10, 3, 10, 30, tzinfo=UTC)
+    state = store.ensure("ABC123")
+    state.broker_connected = True
+    state.mqtt_subscribed = True
+    state.device_online = True
+
+    store.ingest(
+        "devices/ABC123/events",
+        (
+            '{"data":{"heatStatus":true,"coolStatus":false},'
+            '"settings":{"controlStatus":true}}'
+        ),
+        received_at=received_at,
+    )
+
+    assert (
+        controller_operating_state(
+            state,
+            now=received_at + timedelta(seconds=ESP_EVENT_FRESHNESS_SECONDS + 1),
+        )
+        == "telemetry_stale"
+    )
