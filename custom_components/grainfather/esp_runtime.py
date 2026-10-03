@@ -20,6 +20,7 @@ ESP_TARGET_TEMPERATURE_MIN_C = 0.0
 ESP_TARGET_TEMPERATURE_MAX_C = 40.0
 ESP_EVENT_FRESHNESS_SECONDS = 180
 ESP_MAX_OBSERVED_COMMAND_PAYLOAD_CHARS = 512
+ESP_LOCAL_COMMAND_ECHO_WINDOW_SECONDS = 5
 
 
 def mqtt_username(user_id: str | int) -> str:
@@ -276,6 +277,8 @@ class GrainfatherEspLiveState:
     target_write_last_result: str | None = None
     target_write_last_readback_at: datetime | None = None
     target_write_last_readback_value: float | None = None
+    expected_local_command_echo_at: datetime | None = None
+    expected_local_command_echo_payload: str | None = None
 
 
 def event_age_seconds(
@@ -398,6 +401,18 @@ class GrainfatherEspRuntimeStore:
             else None
         )
 
+    def expect_local_command_echo(
+        self,
+        chip_id: str,
+        payload: str,
+        *,
+        published_at: datetime | None = None,
+    ) -> None:
+        """Remember one locally published command so its wildcard echo is not external."""
+        state = self.ensure(chip_id)
+        state.expected_local_command_echo_at = published_at or datetime.now(UTC)
+        state.expected_local_command_echo_payload = payload
+
     def observe_command(
         self,
         chip_id: str,
@@ -422,7 +437,24 @@ class GrainfatherEspRuntimeStore:
 
         state = self.ensure(chip_id)
         encoded = json.dumps(decoded, separators=(",", ":"), ensure_ascii=False)
-        state.observed_external_command_at = observed_at or datetime.now(UTC)
+        observation_time = observed_at or datetime.now(UTC)
+
+        expected_at = state.expected_local_command_echo_at
+        expected_payload = state.expected_local_command_echo_payload
+        if expected_at is not None and expected_payload is not None:
+            echo_age = max(0.0, (observation_time - expected_at).total_seconds())
+            if (
+                echo_age <= ESP_LOCAL_COMMAND_ECHO_WINDOW_SECONDS
+                and encoded == expected_payload
+            ):
+                state.expected_local_command_echo_at = None
+                state.expected_local_command_echo_payload = None
+                return
+            if echo_age > ESP_LOCAL_COMMAND_ECHO_WINDOW_SECONDS:
+                state.expected_local_command_echo_at = None
+                state.expected_local_command_echo_payload = None
+
+        state.observed_external_command_at = observation_time
         state.observed_external_command_id = command_id
         state.observed_external_command_value = decoded.get("value")
         state.observed_external_command_payload = encoded[
