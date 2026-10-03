@@ -7,7 +7,7 @@ Initial upstream base: `f57106cb0f126b387257d47ad6a9d12e7f02b5c7`
 
 ## Current verified baseline — 2026-10-02
 
-Current BrewAssistant release: **2026.10.0b2**.
+Current BrewAssistant release: **2026.10.0b3**.
 
 Versioning transition:
 
@@ -319,3 +319,32 @@ The card:
 - exposes no heater, cooling, mode or generic MQTT command action.
 
 No new GF30 protocol command is introduced in this phase.
+
+
+## Phase 10 — field-verified supervised target write hardening (2026.10.0b3)
+
+A live Home Assistant test on 2026-10-03 changed the GF30 target from 22.0 °C to
+23.0 °C through the supervised service.
+
+Observed end-to-end result:
+
+- request target: 23.0 °C;
+- published payload: `{"command":0,"value":"23.00"}`;
+- controller MQTT readback target: 23.0 °C;
+- result: `verified`;
+- request-to-readback time: approximately 0.54 seconds;
+- fresh MQTT remained the effective live source while REST/history still showed
+  the older 22.0 °C target.
+
+This release also:
+
+- changes the GF30 Supervised Control Card default target step from 0.1 °C to
+  0.5 °C;
+- marks locally published target commands before sending them;
+- consumes the matching wildcard MQTT command echo within a bounded five-second
+  window so it is not mislabeled as an external command;
+- keeps genuinely different or later external commands observable;
+- adds regression tests for local-echo consumption, differing external commands,
+  and expired echo expectations.
+
+No new controller command is introduced.
