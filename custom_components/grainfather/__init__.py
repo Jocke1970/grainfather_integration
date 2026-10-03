@@ -31,6 +31,10 @@ _FERM_DEVICE_CARD_URL = "/grainfather/grainfather-fermentation-device-card.js"
 _FERM_DEVICE_CARD_PATH = (
     Path(__file__).parent / "www" / "grainfather-fermentation-device-card.js"
 )
+_GF30_CONTROL_CARD_URL = "/grainfather/grainfather-gf30-control-card.js"
+_GF30_CONTROL_CARD_PATH = (
+    Path(__file__).parent / "www" / "grainfather-gf30-control-card.js"
+)
 _CARD_RESOURCES_KEY = f"{__name__}_card_registered"
 _CARD_FRONTEND_KEY = f"{__name__}_card_frontend_registered"
 
@@ -272,6 +276,11 @@ async def _async_register_card_resources(hass: HomeAssistant) -> None:
                 path=str(_FERM_DEVICE_CARD_PATH),
                 cache_headers=False,
             ),
+            StaticPathConfig(
+                url_path=_GF30_CONTROL_CARD_URL,
+                path=str(_GF30_CONTROL_CARD_PATH),
+                cache_headers=False,
+            ),
         ]
     )
     if not hass.data.get(_CARD_FRONTEND_KEY):
@@ -280,6 +289,7 @@ async def _async_register_card_resources(hass: HomeAssistant) -> None:
         add_extra_js_url(hass, _ON_TAP_CARD_URL)
         add_extra_js_url(hass, _COLLECTION_CARD_URL)
         add_extra_js_url(hass, _FERM_DEVICE_CARD_URL)
+        add_extra_js_url(hass, _GF30_CONTROL_CARD_URL)
         hass.data[_CARD_FRONTEND_KEY] = True
     hass.data[_CARD_RESOURCES_KEY] = True
 
