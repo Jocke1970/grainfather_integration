@@ -13,8 +13,8 @@ bounded supervised target-temperature write path.
 
 ## Current BrewAssistant baseline
 
-Current development release: **2026.10.0b3**  
-Release label: **2026.10 Beta 3**  
+Current development release: **2026.10.0b4**  
+Release label: **2026.10 Beta 4**  
 Includes: **GF30 Supervised Control Card + local command echo filtering**
 
 Verified on a real Grainfather GF30 / ESP-linked controller:
@@ -111,6 +111,28 @@ remain `unknown` until the controller actually provides a value.
 > on a given GF30. An unknown/null OTA value is **not evidence that an update is available**.
 > The official Grainfather app remains the authoritative user-facing source for whether an
 > OTA update is actually being offered.
+
+
+
+### Controller State
+
+ESP-linked GF30 controllers expose a derived enum sensor named **Controller State**.
+It is intentionally built only from already verified runtime signals and does not map
+the still-unverified numeric `control_mode` or `units` codes.
+
+Possible values are:
+
+- `idle`
+- `heating`
+- `cooling`
+- `control_inactive`
+- `offline`
+- `mqtt_disconnected`
+- `telemetry_stale`
+- `unknown`
+
+The derived sensor also respects MQTT event freshness, so stale heat/cool values are
+not presented as current controller activity.
 
 ## Live MQTT architecture
 
@@ -327,7 +349,7 @@ Important development rules:
 - Controller writes require narrow schemas, visible failure handling and readback where practical.
 - Full CI, Ruff and Hassfest must pass before a BrewAssistant release is considered ready for field testing.
 
-Current automated baseline for `2026.10.0b3`:
+Current automated baseline for `2026.10.0b4`:
 
 - 56 tests passing
 - Ruff passing
