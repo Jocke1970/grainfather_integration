@@ -14,7 +14,8 @@ bounded supervised target-temperature write path.
 ## Current BrewAssistant baseline
 
 Current development release: **2026.10.0b2**  
-Release label: **2026.10 Beta 2**
+Release label: **2026.10 Beta 2**  
+Includes: **GF30 Supervised Control Card**
 
 Verified on a real Grainfather GF30 / ESP-linked controller:
 
