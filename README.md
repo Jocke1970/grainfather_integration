@@ -13,9 +13,9 @@ bounded supervised target-temperature write path.
 
 ## Current BrewAssistant baseline
 
-Current development release: **2026.10.0b4**  
-Release label: **2026.10 Beta 4**  
-Includes: **GF30 Supervised Control Card + Controller State enum**
+Current development release: **2026.10.0b5**  
+Release label: **2026.10 Beta 5**  
+Includes: **GF30 Supervised Control Card + Controller State enum + compact offline card**
 
 Verified on a real Grainfather GF30 / ESP-linked controller:
 
