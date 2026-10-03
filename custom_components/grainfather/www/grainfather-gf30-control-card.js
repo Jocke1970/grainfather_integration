@@ -501,7 +501,8 @@ class GrainfatherGf30ControlCard extends LitElement {
           </div>
         </div>
 
-        ${!online ? nothing : html`\n        <div class="temperatures">
+        ${!online ? nothing : html`
+        <div class="temperatures">
           <div class="metric">
             <div class="metric-label">Aktuell</div>
             <div class="metric-value current">${_fmtTemp(currentTemp)}</div>
@@ -597,7 +598,8 @@ class GrainfatherGf30ControlCard extends LitElement {
             Ingen direkt heater/cooling/mode-styrning exponeras av kortet.
           </div>
         </div>
-        `}\n      </ha-card>
+        `}
+      </ha-card>
     `;
   }
 
