@@ -13,7 +13,7 @@ bounded supervised target-temperature write path.
 
 ## Current BrewAssistant baseline
 
-Current development release: **v0.1.5-ba.8**
+Current development release: **2026.10.0b1**
 
 Verified on a real Grainfather GF30 / ESP-linked controller:
 
@@ -287,7 +287,7 @@ Important development rules:
 - Controller writes require narrow schemas, visible failure handling and readback where practical.
 - Full CI, Ruff and Hassfest must pass before a BrewAssistant release is considered ready for field testing.
 
-Current automated baseline after `ba.8`:
+Current automated baseline for `2026.10.0b1`:
 
 - 56 tests passing
 - Ruff passing
@@ -314,6 +314,16 @@ separate from integration runtime correctness.
 3. Continue cataloguing real GF30 event/meta fields across active heating/cooling/session states.
 4. Improve the GF30 dashboard and supervised-apply UI.
 5. Keep REST/history as the stable fallback while MQTT behavior is hardened further.
+
+## Versioning
+
+The BrewAssistant branch now uses calendar-based prerelease versions:
+
+- `2026.10.0b1`, `2026.10.0b2`, ... for October 2026 betas;
+- `2026.10.0` for the corresponding stable baseline;
+- patch releases increment the final numeric component when required.
+
+`v0.1.5-ba.8` is the final release in the earlier experimental `ba.x` series.
 
 ## BrewAssistant development log
 
