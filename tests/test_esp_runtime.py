@@ -358,3 +358,64 @@ def test_target_write_diagnostics_are_recorded() -> None:
     assert state.target_write_last_result == "verified"
     assert state.target_write_last_readback_value == 18.5
     assert state.target_write_last_readback_at == readback_at
+
+
+def test_expected_local_command_echo_is_consumed() -> None:
+    store = GrainfatherEspRuntimeStore()
+    published_at = datetime(2026, 10, 3, 8, 14, 58, tzinfo=UTC)
+    payload = target_temperature_payload(23.0)
+
+    store.expect_local_command_echo("ABC123", payload, published_at=published_at)
+    store.observe_command(
+        "ABC123",
+        payload,
+        observed_at=published_at + timedelta(milliseconds=200),
+    )
+
+    state = store.get("ABC123")
+    assert state is not None
+    assert state.observed_external_command_count == 0
+    assert state.expected_local_command_echo_at is None
+    assert state.expected_local_command_echo_payload is None
+
+
+def test_different_command_is_still_observed() -> None:
+    store = GrainfatherEspRuntimeStore()
+    published_at = datetime(2026, 10, 3, 8, 14, 58, tzinfo=UTC)
+
+    store.expect_local_command_echo(
+        "ABC123",
+        target_temperature_payload(23.0),
+        published_at=published_at,
+    )
+    store.observe_command(
+        "ABC123",
+        target_temperature_payload(22.5),
+        observed_at=published_at + timedelta(milliseconds=200),
+    )
+
+    state = store.get("ABC123")
+    assert state is not None
+    assert state.observed_external_command_count == 1
+    assert state.observed_external_command_id == 0
+    assert state.observed_external_command_value == "22.50"
+
+
+def test_expired_echo_expectation_does_not_hide_command() -> None:
+    store = GrainfatherEspRuntimeStore()
+    published_at = datetime(2026, 10, 3, 8, 14, 58, tzinfo=UTC)
+    payload = target_temperature_payload(23.0)
+
+    store.expect_local_command_echo("ABC123", payload, published_at=published_at)
+    store.observe_command(
+        "ABC123",
+        payload,
+        observed_at=published_at + timedelta(seconds=6),
+    )
+
+    state = store.get("ABC123")
+    assert state is not None
+    assert state.observed_external_command_count == 1
+    assert state.observed_external_command_value == "23.00"
+    assert state.expected_local_command_echo_at is None
+    assert state.expected_local_command_echo_payload is None
