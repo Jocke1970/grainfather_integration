@@ -62,7 +62,12 @@ jobs:
           fi
 
           cat > /tmp/release-notes.md <<'EOF'
-          BrewAssistant test release from `brewassistant-grainfather`.
+          BrewAssistant beta release from `brewassistant-grainfather`.
+
+          2026.10 beta baseline:
+
+          - new calendar-based beta versioning beginning with 2026.10.0b1
+          - manifest documentation and issue tracker point to the BrewAssistant fork
 
           Modern GF30 ESP/MQTT telemetry runtime:
 
