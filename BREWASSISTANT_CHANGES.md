@@ -7,7 +7,7 @@ Initial upstream base: `f57106cb0f126b387257d47ad6a9d12e7f02b5c7`
 
 ## Current verified baseline — 2026-10-02
 
-Current BrewAssistant release: **2026.10.0b3**.
+Current BrewAssistant release: **2026.10.0b4**.
 
 Versioning transition:
 
@@ -348,3 +348,28 @@ This release also:
   and expired echo expectations.
 
 No new controller command is introduced.
+
+
+## Phase 11 — derived GF30 controller state (2026.10.0b4)
+
+Adds a human-readable enum sensor for GF30 runtime state without guessing the
+meaning of unverified numeric controller codes.
+
+The new Controller State sensor is derived only from already verified signals:
+
+- MQTT transport/subscription state;
+- controller online state;
+- MQTT event freshness;
+- heating;
+- cooling;
+- control active.
+
+Possible values are `idle`, `heating`, `cooling`, `control_inactive`,
+`offline`, `mqtt_disconnected`, `telemetry_stale`, and `unknown`.
+
+Raw `control_mode` and `controller_units` code sensors remain available as
+diagnostics and are intentionally not translated until their mappings are
+independently verified.
+
+Regression tests cover the verified operating-state transitions and stale-event
+handling.
