@@ -258,6 +258,39 @@ The preferred GF30 dashboard pattern is:
 - dynamic entity lists filtered by the Grainfather GF30 device;
 - unknown diagnostics hidden from the normal view while remaining available in a raw/debug expander.
 
+
+### GF30 Supervised Control Card
+
+The integration now includes `grainfather-gf30-control-card.js`, a dedicated target
+control panel that keeps controller writes separate from ordinary number entities.
+
+Example:
+
+```yaml
+type: custom:grainfather-gf30-control-card
+name: Grainfather GF30
+temperature_entity: sensor.grainfather_gf30_temperature
+target_entity: sensor.grainfather_gf30_target_temperature
+online_entity: binary_sensor.grainfather_gf30_controller_online
+heating_entity: binary_sensor.grainfather_gf30_heating
+cooling_entity: binary_sensor.grainfather_gf30_cooling
+control_active_entity: binary_sensor.grainfather_gf30_control_active
+min: 0
+max: 40
+step: 0.1
+```
+
+The card uses a two-stage workflow:
+
+1. choose a new target and arm the change;
+2. explicitly apply the target.
+
+Apply calls `grainfather.set_controller_target_temperature` with `confirm: true`.
+The card displays backend write/readback state from the temperature entity attributes:
+`pending`, `verified`, `mismatch` or `timeout`.
+
+The card never exposes heater, cooling or controller-mode writes.
+
 ## REST / cloud data
 
 The Grainfather cloud side still provides:
