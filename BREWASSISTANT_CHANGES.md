@@ -300,3 +300,22 @@ Included baseline maintenance:
 No new controller command is introduced by this versioning/metadata release.
 The outbound MQTT boundary remains command 0 for supervised target temperature
 and command 23 for telemetry keepalive only.
+
+
+## Phase 9 — GF30 supervised control card (2026.10.0b2)
+
+Adds a dedicated Lovelace control card for the already field-verified supervised
+target-temperature service.
+
+The card:
+
+- shows current temperature, target and controller online state;
+- color-codes heating, cooling and control-active status;
+- allows bounded target adjustment with configurable min/max/step;
+- requires a two-stage arm + explicit apply interaction;
+- calls only `grainfather.set_controller_target_temperature` with `confirm: true`;
+- surfaces backend write/readback results: pending, verified, mismatch and timeout;
+- derives device ID from the temperature entity unless explicitly configured;
+- exposes no heater, cooling, mode or generic MQTT command action.
+
+No new GF30 protocol command is introduced in this phase.
