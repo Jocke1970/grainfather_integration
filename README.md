@@ -15,7 +15,7 @@ bounded supervised target-temperature write path.
 
 Current development release: **2026.10.0b3**  
 Release label: **2026.10 Beta 3**  
-Includes: **GF30 Supervised Control Card**
+Includes: **GF30 Supervised Control Card + local command echo filtering**
 
 Verified on a real Grainfather GF30 / ESP-linked controller:
 
