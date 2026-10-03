@@ -13,8 +13,8 @@ bounded supervised target-temperature write path.
 
 ## Current BrewAssistant baseline
 
-Current development release: **2026.10.0b2**  
-Release label: **2026.10 Beta 2**  
+Current development release: **2026.10.0b3**  
+Release label: **2026.10 Beta 3**  
 Includes: **GF30 Supervised Control Card**
 
 Verified on a real Grainfather GF30 / ESP-linked controller:
@@ -278,7 +278,7 @@ cooling_entity: binary_sensor.grainfather_gf30_cooling
 control_active_entity: binary_sensor.grainfather_gf30_control_active
 min: 0
 max: 40
-step: 0.1
+step: 0.5
 ```
 
 The card uses a two-stage workflow:
@@ -291,6 +291,11 @@ The card displays backend write/readback state from the temperature entity attri
 `pending`, `verified`, `mismatch` or `timeout`.
 
 The card never exposes heater, cooling or controller-mode writes.
+
+Field verification on 2026-10-03 confirmed a Home Assistant supervised target change
+from 22.0 °C to 23.0 °C with command 0 and fresh MQTT readback. The request completed
+as `verified` in approximately 0.54 seconds. Local command echoes are filtered from
+the passive external-command observer so that its diagnostics remain semantically correct.
 
 ## REST / cloud data
 
@@ -322,7 +327,7 @@ Important development rules:
 - Controller writes require narrow schemas, visible failure handling and readback where practical.
 - Full CI, Ruff and Hassfest must pass before a BrewAssistant release is considered ready for field testing.
 
-Current automated baseline for `2026.10.0b2`:
+Current automated baseline for `2026.10.0b3`:
 
 - 56 tests passing
 - Ruff passing
