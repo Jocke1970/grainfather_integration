@@ -13,8 +13,8 @@ bounded supervised target-temperature write path.
 
 ## Current BrewAssistant baseline
 
-Current development release: **2026.10.0b1**  
-Release label: **2026.10 Beta 1**
+Current development release: **2026.10.0b2**  
+Release label: **2026.10 Beta 2**
 
 Verified on a real Grainfather GF30 / ESP-linked controller:
 
@@ -321,7 +321,7 @@ Important development rules:
 - Controller writes require narrow schemas, visible failure handling and readback where practical.
 - Full CI, Ruff and Hassfest must pass before a BrewAssistant release is considered ready for field testing.
 
-Current automated baseline for `2026.10.0b1`:
+Current automated baseline for `2026.10.0b2`:
 
 - 56 tests passing
 - Ruff passing
