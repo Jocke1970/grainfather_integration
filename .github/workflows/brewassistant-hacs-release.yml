@@ -68,6 +68,7 @@ jobs:
 
           - new calendar-based beta versioning beginning with 2026.10.0b1
           - manifest documentation and issue tracker point to the BrewAssistant fork
+          - dedicated GF30 Supervised Control Card with arm/apply + MQTT readback status
 
           Modern GF30 ESP/MQTT telemetry runtime:
 
