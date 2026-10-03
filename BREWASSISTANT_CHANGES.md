@@ -5,9 +5,9 @@ Upstream: `fidley/grainfather_integration:main`
 Initial upstream base: `f57106cb0f126b387257d47ad6a9d12e7f02b5c7`
 
 
-## Current verified baseline — 2026-10-02
+## Current verified baseline — 2026-10-03
 
-Current BrewAssistant release: **2026.10.0b4**.
+Current BrewAssistant release: **2026.10.0b5**.
 
 Versioning transition:
 
@@ -15,6 +15,12 @@ Versioning transition:
 - `2026.10.0b1` starts the calendar-based beta series;
 - subsequent October betas use `2026.10.0b2`, `2026.10.0b3`, and so on;
 - the intended stable October baseline is `2026.10.0`.
+
+Beta 5 UI change:
+
+- the dedicated GF30 Supervised Control Card collapses to header + OFFLINE badge while the controller is offline;
+- stale temperature/target/status values and target controls are hidden until the controller is online again;
+- no backend control or MQTT behavior changes in this release.
 
 Field-verified on the current ESP-linked GF30:
 
