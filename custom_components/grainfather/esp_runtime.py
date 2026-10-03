@@ -304,6 +304,35 @@ def event_is_fresh(
     return age is not None and age <= max_age_seconds
 
 
+def controller_operating_state(
+    state: GrainfatherEspLiveState | None,
+    *,
+    now: datetime | None = None,
+) -> str:
+    """Return a verified high-level GF30 controller state."""
+    if state is None:
+        return "unknown"
+    if state.broker_connected is False or state.mqtt_subscribed is False:
+        return "mqtt_disconnected"
+    if state.device_online is False:
+        return "offline"
+    if not event_is_fresh(state, now=now):
+        return "telemetry_stale"
+
+    event = state.event
+    if event is None:
+        return "telemetry_stale"
+    if event.heating is True:
+        return "heating"
+    if event.cooling is True:
+        return "cooling"
+    if event.control_active is False:
+        return "control_inactive"
+    if event.control_active is True:
+        return "idle"
+    return "unknown"
+
+
 @dataclass(slots=True)
 class GrainfatherEspRuntimeStore:
     """In-memory cache for ESP MQTT telemetry observations."""
