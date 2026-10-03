@@ -4,11 +4,11 @@
   "codeowners": ["@fidley"],
   "config_flow": true,
   "dependencies": ["frontend", "http"],
-  "documentation": "https://github.com/fidley/grainfather_integration#readme",
+  "documentation": "https://github.com/Jocke1970/grainfather_integration#readme",
   "integration_type": "hub",
   "iot_class": "cloud_polling",
-  "issue_tracker": "https://github.com/fidley/grainfather_integration/issues",
+  "issue_tracker": "https://github.com/Jocke1970/grainfather_integration/issues",
   "loggers": ["custom_components.grainfather"],
   "requirements": [],
-  "version": "0.1.5-ba.8"
+  "version": "2026.10.0b1"
 }
