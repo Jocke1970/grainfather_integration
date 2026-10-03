@@ -7,7 +7,7 @@ Initial upstream base: `f57106cb0f126b387257d47ad6a9d12e7f02b5c7`
 
 ## Current verified baseline — 2026-10-02
 
-Current BrewAssistant release: **2026.10.0b1**.
+Current BrewAssistant release: **2026.10.0b2**.
 
 Versioning transition:
 
