@@ -70,6 +70,7 @@ jobs:
           - manifest documentation and issue tracker point to the BrewAssistant fork
           - dedicated GF30 Supervised Control Card with arm/apply + MQTT readback status
           - 0.5 °C default target step and filtering of locally published command-0 echoes
+          - derived GF30 Controller State enum from verified live runtime signals
 
           Modern GF30 ESP/MQTT telemetry runtime:
 
