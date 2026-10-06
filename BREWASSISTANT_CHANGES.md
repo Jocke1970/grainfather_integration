@@ -5,9 +5,27 @@ Upstream: `fidley/grainfather_integration:main`
 Initial upstream base: `f57106cb0f126b387257d47ad6a9d12e7f02b5c7`
 
 
-## Current verified baseline — 2026-10-03
+## Current verified baseline — 2026-10-06
 
-Current BrewAssistant release: **2026.10.0b5**.
+Current BrewAssistant candidate: **2026.10.0b6**.
+
+
+### Beta 6 — GF30 MQTT cold-start recovery
+
+- MQTT startup is now reconciled after every new REST coordinator snapshot, so a
+  GF30 ESP chip ID that appears after Home Assistant startup can start live MQTT
+  automatically without a manual integration reload.
+- A healthy subscriber with unchanged chip IDs is reused; stopped or changed
+  subscribers are repaired/replaced cleanly.
+- After successful MQTT SUBACK the integration proactively sends the already
+  verified command 23 initial telemetry request instead of depending on an
+  online-status publication arriving first.
+- Existing status-driven and periodic telemetry keepalive behavior is retained.
+- No new controller write type is introduced; the outbound MQTT boundary remains
+  command 23 for telemetry maintenance and command 0 for explicitly confirmed
+  target writes with fresh readback.
+- Primary field test for b6: perform a normal Home Assistant restart and verify
+  that GF30 live telemetry resumes without manually reloading the integration.
 
 Versioning transition:
 
