@@ -97,6 +97,11 @@ class GrainfatherEspMqttSubscriber:
     def running(self) -> bool:
         return self._task is not None and not self._task.done()
 
+    @property
+    def chip_ids(self) -> tuple[str, ...]:
+        """Return normalized ESP chip IDs owned by this subscriber."""
+        return self._chip_ids
+
     def start(self) -> None:
         if self.running or not self._chip_ids:
             return
@@ -244,6 +249,18 @@ class GrainfatherEspMqttSubscriber:
                 len(topics),
                 len(self._chip_ids),
             )
+
+            # Do not depend on a retained/initial status publication to start
+            # live telemetry. A Home Assistant cold start may subscribe after
+            # the controller's online status was already published. Request a
+            # short telemetry window immediately after SUBACK; normal event
+            # processing then extends it to the regular refresh window.
+            for chip_id in self._chip_ids:
+                await self._send_telemetry_keepalive(
+                    writer,
+                    chip_id,
+                    ESP_INITIAL_SUBSCRIPTION_SECONDS,
+                )
 
             while not self._stop.is_set():
                 if await self._send_due_telemetry_keepalives(writer):
