@@ -212,6 +212,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         hass.async_create_task(
             _async_prune_stale_registry_entries(hass, entry, coordinator)
         )
+        hass.async_create_task(
+            _async_reconcile_esp_mqtt_subscriber(coordinator)
+        )
 
     entry.async_on_unload(
         coordinator.async_add_listener(_async_handle_coordinator_update)
@@ -222,23 +225,51 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     await _async_create_helpers(hass, entry)
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
-    account = coordinator.data.account
-    chip_ids = tuple(
-        device.esp_chip_id
-        for device in coordinator.data.fermentation_devices
-        if device.esp_chip_id
-    )
-    if account and account.user_id and chip_ids:
-        coordinator.esp_mqtt_subscriber = GrainfatherEspMqttSubscriber(
-            user_id=account.user_id,
-            chip_ids=chip_ids,
-            runtime_store=coordinator.esp_runtime,
-            on_update=coordinator.async_update_listeners,
-        )
-        coordinator.esp_mqtt_subscriber.start()
+    await _async_reconcile_esp_mqtt_subscriber(coordinator)
 
     entry.async_on_unload(entry.add_update_listener(_async_options_updated))
     return True
+
+
+async def _async_reconcile_esp_mqtt_subscriber(
+    coordinator: GrainfatherDataUpdateCoordinator,
+) -> None:
+    """Start or repair ESP MQTT telemetry after REST discovery changes.
+
+    Home Assistant may finish the initial Grainfather REST refresh before an
+    ESP chip ID is available. Later coordinator refreshes must therefore be
+    able to start MQTT without requiring a config-entry reload.
+    """
+    account = coordinator.data.account
+    chip_ids = tuple(
+        dict.fromkeys(
+            device.esp_chip_id.strip().casefold()
+            for device in coordinator.data.fermentation_devices
+            if device.esp_chip_id and device.esp_chip_id.strip()
+        )
+    )
+    if not account or not account.user_id or not chip_ids:
+        return
+
+    subscriber = coordinator.esp_mqtt_subscriber
+    if (
+        subscriber is not None
+        and subscriber.chip_ids == chip_ids
+        and subscriber.running
+    ):
+        return
+
+    if subscriber is not None:
+        await subscriber.async_stop()
+
+    subscriber = GrainfatherEspMqttSubscriber(
+        user_id=account.user_id,
+        chip_ids=chip_ids,
+        runtime_store=coordinator.esp_runtime,
+        on_update=coordinator.async_update_listeners,
+    )
+    coordinator.esp_mqtt_subscriber = subscriber
+    subscriber.start()
 
 
 async def _async_options_updated(hass: HomeAssistant, entry: ConfigEntry) -> None:
