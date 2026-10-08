@@ -404,7 +404,13 @@ class GrainfatherEspMqttSubscriber:
             raise ConnectionError("Grainfather controller MQTT is not ready")
 
         previous_event_at = state.last_event_at
-        _LOGGER.debug("GF30 target command prepared: chip=%s target=%.2f previous_event_at=%s", normalized_chip_id, target, previous_event_at)
+        _LOGGER.debug(
+            "GF30 target command prepared: chip=%s target=%.2f "
+            "previous_event_at=%s",
+            normalized_chip_id,
+            target,
+            previous_event_at,
+        )
         payload = target_temperature_payload(target)
         packet = _build_target_temperature_packet(normalized_chip_id, target)
         self._runtime_store.mark_target_write_requested(normalized_chip_id, target)
@@ -417,7 +423,12 @@ class GrainfatherEspMqttSubscriber:
         async with self._write_lock:
             writer.write(packet)
             await writer.drain()
-        _LOGGER.debug("GF30 MQTT PUBLISH drained: chip=%s target=%.2f; controller acceptance unverified", normalized_chip_id, target)
+        _LOGGER.debug(
+            "GF30 MQTT PUBLISH drained: chip=%s target=%.2f; "
+            "controller acceptance unverified",
+            normalized_chip_id,
+            target,
+        )
 
         deadline = (
             asyncio.get_running_loop().time()
@@ -456,8 +467,20 @@ class GrainfatherEspMqttSubscriber:
 
         final_state = self._runtime_store.get(normalized_chip_id)
         final_at = final_state.last_event_at if final_state else None
-        final_target = final_state.event.target_temperature if final_state and final_state.event else None
-        _LOGGER.warning("GF30 MQTT target readback timeout: chip=%s requested=%.2f previous_event=%s latest_event=%s latest_target=%s", normalized_chip_id, target, previous_event_at, final_at, final_target)
+        final_target = (
+            final_state.event.target_temperature
+            if final_state and final_state.event
+            else None
+        )
+        _LOGGER.warning(
+            "GF30 MQTT target readback timeout: chip=%s requested=%.2f "
+            "previous_event=%s latest_event=%s latest_target=%s",
+            normalized_chip_id,
+            target,
+            previous_event_at,
+            final_at,
+            final_target,
+        )
         self._runtime_store.mark_target_write_result(
             normalized_chip_id,
             "timeout",
