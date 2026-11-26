@@ -422,8 +422,9 @@ class GrainfatherGf30ControlCard extends LitElement {
     return _number(this._temperatureState()?.attributes?.device_id);
   }
 
-  _isOn(entityId) {
-    return this._state(entityId)?.state === 'on';
+  _binaryState(entityId) {
+    const value = this._state(entityId)?.state;
+    return value === 'on' ? true : value === 'off' ? false : null;
   }
 
   _controllerStatus() {
@@ -485,7 +486,7 @@ class GrainfatherGf30ControlCard extends LitElement {
       ['target_entity', 'Target'],
       ['online_entity', 'Controller Online'],
     ];
-    return required.flatMap(([key, label]) => {
+    const issues = required.flatMap(([key, label]) => {
       const id = this._config[key];
       if (!id) return key === 'online_entity' ? [] : [`${label}: not configured`];
       const entity = this._state(id);
@@ -495,6 +496,12 @@ class GrainfatherGf30ControlCard extends LitElement {
       }
       return [];
     });
+    const tempId = _number(this._temperatureState()?.attributes?.device_id);
+    const targetId = _number(this._targetState()?.attributes?.device_id);
+    if (tempId != null && targetId != null && tempId !== targetId) {
+      issues.push(`Temperature/Target device ID mismatch: ${tempId} vs ${targetId}`);
+    }
+    return issues;
   }
 
   _suggestedEntities() {
@@ -658,9 +665,9 @@ class GrainfatherGf30ControlCard extends LitElement {
     const canWrite = this._canWrite();
     const result = this._result();
 
-    const heating = this._isOn(this._config.heating_entity);
-    const cooling = this._isOn(this._config.cooling_entity);
-    const controlActive = this._isOn(this._config.control_active_entity);
+    const heating = this._binaryState(this._config.heating_entity);
+    const cooling = this._binaryState(this._config.cooling_entity);
+    const controlActive = this._binaryState(this._config.control_active_entity);
     const telemetryLive = mqtt.key === 'online';
 
     const changed = (
@@ -719,14 +726,17 @@ class GrainfatherGf30ControlCard extends LitElement {
           ` : nothing}
 
           <div class="status-row">
-            <div class="status ${telemetryLive && heating ? 'heat' : ''}">
-              ${!telemetryLive ? 'Värme —' : heating ? '🔥 Värmer' : 'Värme av'}
+            <div class="status ${telemetryLive && heating === true ? 'heat' : ''}">
+              ${!telemetryLive || heating == null
+                ? 'Värme —' : heating ? '🔥 Värmer' : 'Värme av'}
             </div>
-            <div class="status ${telemetryLive && cooling ? 'cool' : ''}">
-              ${!telemetryLive ? 'Kyla —' : cooling ? '❄️ Kyler' : 'Kyla av'}
+            <div class="status ${telemetryLive && cooling === true ? 'cool' : ''}">
+              ${!telemetryLive || cooling == null
+                ? 'Kyla —' : cooling ? '❄️ Kyler' : 'Kyla av'}
             </div>
-            <div class="status ${telemetryLive && controlActive ? 'active' : ''}">
-              ${!telemetryLive ? 'Kontroll —' : controlActive ? '✓ Kontroll' : 'Kontroll av'}
+            <div class="status ${telemetryLive && controlActive === true ? 'active' : ''}">
+              ${!telemetryLive || controlActive == null
+                ? 'Kontroll —' : controlActive ? '✓ Kontroll' : 'Kontroll av'}
             </div>
           </div>
 
