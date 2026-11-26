@@ -38,6 +38,11 @@ jobs:
       - name: Pytest
         run: python -m pytest -q
 
+      - name: GF30 card smoke tests
+        run: |
+          node --check custom_components/grainfather/www/grainfather-gf30-control-card.js
+          node tests/gf30_card_smoke.cjs
+
       - name: Ruff new BrewAssistant files
         # Upstream currently contains pre-existing Ruff debt. Keep this branch
         # from adding lint debt without rewriting unrelated upstream files.
