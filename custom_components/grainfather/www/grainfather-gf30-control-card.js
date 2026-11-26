@@ -5,8 +5,19 @@ const DEFAULT_MAX = 40;
 const DEFAULT_STEP = 0.5;
 
 function _number(value) {
+  if (value == null || value === '' || value === 'unknown' || value === 'unavailable') {
+    return null;
+  }
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : null;
+}
+
+function _diagnosticValue(value) {
+  if (value == null || value === '' || value === 'unknown' || value === 'unavailable') {
+    return '—';
+  }
+  if (typeof value === 'boolean') return value ? 'Yes' : 'No';
+  return String(value);
 }
 
 function _fmtTemp(value) {
@@ -74,6 +85,69 @@ class GrainfatherGf30ControlCard extends LitElement {
       color: var(--error-color, #db4437);
       background: color-mix(in srgb, var(--error-color, #db4437) 14%, transparent);
     }
+
+    .badge.warning {
+      color: var(--warning-color, #ff9800);
+      background: color-mix(in srgb, var(--warning-color, #ff9800) 14%, transparent);
+    }
+
+    .badges {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+      gap: 6px;
+      max-width: 62%;
+    }
+
+    .notice {
+      margin: 10px 0;
+      color: var(--secondary-text-color);
+      font-size: .82rem;
+      line-height: 1.5;
+    }
+
+    .diagnostics {
+      margin-top: 12px;
+      border-top: 1px solid var(--divider-color);
+      padding-top: 12px;
+    }
+
+    .diagnostics summary {
+      cursor: pointer;
+      font-size: .85rem;
+      font-weight: 700;
+    }
+
+    .diag-grid {
+      display: grid;
+      gap: 7px;
+      margin-top: 10px;
+      font-size: .78rem;
+    }
+
+    .diag-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr);
+      gap: 8px;
+      border-bottom: 1px solid var(--divider-color);
+      padding-bottom: 5px;
+    }
+
+    .diag-row span:first-child { color: var(--secondary-text-color); }
+
+    .diag-row span:last-child {
+      overflow-wrap: anywhere;
+      text-align: right;
+    }
+
+    .entity-help {
+      margin-top: 12px;
+      font-size: .78rem;
+      line-height: 1.6;
+      overflow-wrap: anywhere;
+    }
+
+    .entity-help ul { margin: 5px 0 0; padding-left: 20px; }
 
     .temperatures {
       display: grid;
@@ -352,10 +426,104 @@ class GrainfatherGf30ControlCard extends LitElement {
     return this._state(entityId)?.state === 'on';
   }
 
-  _online() {
+  _controllerStatus() {
     const configured = this._config.online_entity;
-    if (configured) return this._state(configured)?.state === 'on';
-    return this._temperatureState()?.attributes?.controller_online === true;
+    if (configured) {
+      const entity = this._state(configured);
+      if (!entity) {
+        return { key: 'unknown', label: 'CONTROLLER UNKNOWN', icon: 'mdi:help-network' };
+      }
+      if (entity.state === 'on') {
+        return { key: 'online', label: 'CONTROLLER ONLINE', icon: 'mdi:lan-connect' };
+      }
+      if (entity.state === 'off') {
+        return { key: 'offline', label: 'CONTROLLER OFFLINE', icon: 'mdi:lan-disconnect' };
+      }
+      return { key: 'unknown', label: 'CONTROLLER UNKNOWN', icon: 'mdi:help-network' };
+    }
+
+    const online = this._temperatureState()?.attributes?.controller_online;
+    if (online === true) {
+      return { key: 'online', label: 'CONTROLLER ONLINE', icon: 'mdi:lan-connect' };
+    }
+    if (online === false) {
+      return { key: 'offline', label: 'CONTROLLER OFFLINE', icon: 'mdi:lan-disconnect' };
+    }
+    return { key: 'unknown', label: 'CONTROLLER UNKNOWN', icon: 'mdi:help-network' };
+  }
+
+  _mqttStatus() {
+    const attrs = this._temperatureState()?.attributes || {};
+    const connected = attrs.live_mqtt_transport_connected;
+    const subscribed = attrs.live_mqtt_subscribed;
+    const fresh = attrs.live_mqtt_event_fresh;
+
+    if (connected === false) {
+      return { key: 'offline', label: 'MQTT DISCONNECTED', icon: 'mdi:cloud-off-outline' };
+    }
+    if (connected !== true) {
+      return { key: 'unknown', label: 'MQTT UNKNOWN', icon: 'mdi:help-network' };
+    }
+    if (subscribed === false) {
+      return { key: 'warning', label: 'MQTT NOT SUBSCRIBED', icon: 'mdi:cloud-alert' };
+    }
+    if (subscribed !== true) {
+      return { key: 'unknown', label: 'MQTT UNKNOWN', icon: 'mdi:help-network' };
+    }
+    if (fresh === false) {
+      return { key: 'warning', label: 'MQTT STALE', icon: 'mdi:clock-alert-outline' };
+    }
+    if (fresh !== true) {
+      return { key: 'unknown', label: 'MQTT FRESHNESS UNKNOWN', icon: 'mdi:help-network' };
+    }
+    return { key: 'online', label: 'MQTT LIVE', icon: 'mdi:cloud-check-outline' };
+  }
+
+  _entityIssues() {
+    const required = [
+      ['temperature_entity', 'Temperature'],
+      ['target_entity', 'Target'],
+      ['online_entity', 'Controller Online'],
+    ];
+    return required.flatMap(([key, label]) => {
+      const id = this._config[key];
+      if (!id) return key === 'online_entity' ? [] : [`${label}: not configured`];
+      const entity = this._state(id);
+      if (!entity) return [`${label}: ${id} (not found)`];
+      if (entity.state === 'unknown' || entity.state === 'unavailable') {
+        return [`${label}: ${id} (${entity.state})`];
+      }
+      return [];
+    });
+  }
+
+  _suggestedEntities() {
+    if (!this.hass?.states) return [];
+    return Object.entries(this.hass.states)
+      .filter(([id, entity]) => (
+        entity.attributes?.grainfather_entity_type === 'fermentation_device'
+        && ['temperature', 'target_temperature'].includes(
+          entity.attributes?.grainfather_measurement,
+        )
+      ) || (
+        id.startsWith('binary_sensor.grainfather_')
+        && id.includes('controller_online')
+      ))
+      .slice(0, 12)
+      .map(([id, entity]) => `${id} (${entity.state})`);
+  }
+
+  _canWrite() {
+    const deviceId = this._deviceId();
+    return (
+      this._controllerStatus().key === 'online'
+      && this._mqttStatus().key === 'online'
+      && this._entityIssues().length === 0
+      && this._currentTarget() != null
+      && deviceId != null
+      && Number.isInteger(deviceId)
+      && deviceId > 0
+    );
   }
 
   _setDraft(value) {
@@ -378,7 +546,7 @@ class GrainfatherGf30ControlCard extends LitElement {
   }
 
   _arm() {
-    if (!this._online() || this._busy) return;
+    if (!this._canWrite() || this._busy) return;
     const draft = this._draftValue();
     const current = this._currentTarget();
     if (draft == null || current == null || Math.abs(draft - current) < 0.001) return;
@@ -395,7 +563,7 @@ class GrainfatherGf30ControlCard extends LitElement {
   async _apply() {
     const target = this._draftValue();
     const deviceId = this._deviceId();
-    if (!this.hass || target == null || deviceId == null || !this._online()) return;
+    if (!this.hass || target == null || !this._canWrite()) return;
 
     this._busy = true;
     this._armed = false;
@@ -448,44 +616,63 @@ class GrainfatherGf30ControlCard extends LitElement {
     return { state: String(result), text: String(result) };
   }
 
+  _diagnosticRows() {
+    const attrs = this._temperatureState()?.attributes || {};
+    const controller = this._controllerStatus();
+    const mqtt = this._mqttStatus();
+    return [
+      ['Controller', controller.label],
+      ['MQTT', mqtt.label],
+      ['Broker', attrs.live_mqtt_broker],
+      ['Broker connected', attrs.live_mqtt_transport_connected],
+      ['MQTT subscribed', attrs.live_mqtt_subscribed],
+      ['Subscription codes', attrs.live_mqtt_subscription_codes?.join(', ')],
+      ['Event fresh', attrs.live_mqtt_event_fresh],
+      ['Event age (seconds)', attrs.live_mqtt_event_age_seconds],
+      ['Last MQTT event', attrs.live_mqtt_event_last_received_at],
+      ['Last MQTT topic', attrs.live_mqtt_last_topic],
+      ['Temperature source', attrs.effective_temperature_source],
+      ['Target source', this._targetState()?.attributes?.effective_target_temperature_source],
+      ['Last MQTT error', attrs.live_mqtt_last_error],
+      ['Last target request', attrs.target_write_last_requested_at],
+      ['Requested target', attrs.target_write_last_requested_value],
+      ['Target-write result', attrs.target_write_last_result],
+      ['Readback target', attrs.target_write_last_readback_value],
+      ['Readback time', attrs.target_write_last_readback_at],
+      ['Device ID', this._deviceId()],
+    ];
+  }
+
   render() {
     if (!this.hass) return nothing;
 
     const tempState = this._temperatureState();
     const targetState = this._targetState();
-    if (!tempState || !targetState) {
-      return html`
-        <ha-card>
-          <div class="result error">
-            Kan inte hitta temperature_entity eller target_entity.
-          </div>
-        </ha-card>
-      `;
-    }
-
-    const currentTemp = _number(tempState.state);
+    const currentTemp = _number(tempState?.state);
     const currentTarget = this._currentTarget();
     const draft = this._draftValue();
     const deviceId = this._deviceId();
-    const online = this._online();
+    const controller = this._controllerStatus();
+    const mqtt = this._mqttStatus();
+    const issues = this._entityIssues();
+    const canWrite = this._canWrite();
+    const result = this._result();
 
     const heating = this._isOn(this._config.heating_entity);
     const cooling = this._isOn(this._config.cooling_entity);
     const controlActive = this._isOn(this._config.control_active_entity);
+    const telemetryLive = mqtt.key === 'online';
 
     const changed = (
       draft != null
       && currentTarget != null
       && Math.abs(draft - currentTarget) >= 0.001
     );
-
     const delta = (
       draft != null && currentTarget != null
         ? draft - currentTarget
         : null
     );
-
-    const result = this._result();
     const step = Number(this._config.step ?? DEFAULT_STEP);
 
     return html`
@@ -495,110 +682,163 @@ class GrainfatherGf30ControlCard extends LitElement {
             <div class="title">${this._config.name}</div>
             <div class="subtitle">Supervised target control</div>
           </div>
-          <div class="badge ${online ? 'online' : 'offline'}">
-            <ha-icon icon="${online ? 'mdi:lan-connect' : 'mdi:lan-disconnect'}"></ha-icon>
-            ${online ? 'ONLINE' : 'OFFLINE'}
+          <div class="badges">
+            ${[controller, mqtt].map((status) => html`
+              <div class="badge ${status.key}">
+                <ha-icon icon="${status.icon}"></ha-icon>
+                ${status.label}
+              </div>
+            `)}
           </div>
         </div>
 
-        ${!online ? nothing : html`
-        <div class="temperatures">
-          <div class="metric">
-            <div class="metric-label">Aktuell</div>
-            <div class="metric-value current">${_fmtTemp(currentTemp)}</div>
+        ${issues.length ? html`
+          <div class="result error">
+            Some configured entities are missing or unavailable.
+            Open diagnostics below to find the affected entity IDs.
           </div>
-          <div class="metric">
-            <div class="metric-label">Target</div>
-            <div class="metric-value target">${_fmtTemp(currentTarget)}</div>
-          </div>
-        </div>
+        ` : nothing}
 
-        <div class="status-row">
-          <div class="status ${heating ? 'heat' : ''}">
-            ${heating ? '🔥 Värmer' : 'Värme av'}
-          </div>
-          <div class="status ${cooling ? 'cool' : ''}">
-            ${cooling ? '❄️ Kyler' : 'Kyla av'}
-          </div>
-          <div class="status ${controlActive ? 'active' : ''}">
-            ${controlActive ? '✓ Kontroll' : 'Kontroll av'}
-          </div>
-        </div>
-
-        <div class="control">
-          <div class="control-label">Ny target</div>
-
-          <div class="target-editor">
-            <button
-              class="step-btn"
-              ?disabled=${this._busy || draft == null}
-              @click=${() => this._nudge(-step)}
-              aria-label="Sänk target"
-            >−</button>
-
-            <input
-              type="number"
-              .value=${draft == null ? '' : String(draft)}
-              min=${this._config.min}
-              max=${this._config.max}
-              step=${step}
-              ?disabled=${this._busy}
-              @input=${(event) => this._setDraft(event.target.value)}
-            />
-
-            <button
-              class="step-btn"
-              ?disabled=${this._busy || draft == null}
-              @click=${() => this._nudge(step)}
-              aria-label="Höj target"
-            >+</button>
+        ${tempState && targetState && controller.key === 'online' ? html`
+          <div class="temperatures">
+            <div class="metric">
+              <div class="metric-label">Aktuell</div>
+              <div class="metric-value current">${_fmtTemp(currentTemp)}</div>
+            </div>
+            <div class="metric">
+              <div class="metric-label">Target</div>
+              <div class="metric-value target">${_fmtTemp(currentTarget)}</div>
+            </div>
           </div>
 
-          <div class="delta">
-            ${delta == null
-              ? nothing
-              : Math.abs(delta) < 0.001
-                ? 'Oförändrad'
-                : `${delta > 0 ? '+' : ''}${delta.toFixed(1)} °C från nuvarande target`}
+          ${!telemetryLive ? html`
+            <p class="notice">
+              MQTT telemetry is not confirmed fresh. Values may be
+              REST/history fallback; target writes are disabled.
+            </p>
+          ` : nothing}
+
+          <div class="status-row">
+            <div class="status ${telemetryLive && heating ? 'heat' : ''}">
+              ${!telemetryLive ? 'Värme —' : heating ? '🔥 Värmer' : 'Värme av'}
+            </div>
+            <div class="status ${telemetryLive && cooling ? 'cool' : ''}">
+              ${!telemetryLive ? 'Kyla —' : cooling ? '❄️ Kyler' : 'Kyla av'}
+            </div>
+            <div class="status ${telemetryLive && controlActive ? 'active' : ''}">
+              ${!telemetryLive ? 'Kontroll —' : controlActive ? '✓ Kontroll' : 'Kontroll av'}
+            </div>
           </div>
 
-          ${!this._armed
-            ? html`
-                <button
-                  class="action-btn"
-                  ?disabled=${this._busy || !online || !changed || deviceId == null}
-                  @click=${this._arm}
-                >
-                  ${this._busy ? 'Väntar på GF30…' : 'ARMERA TARGETÄNDRING'}
-                </button>
-              `
-            : html`
-                <div class="confirm-box">
-                  <div class="confirm-title">Bekräfta target ${_fmtTemp(draft)}</div>
-                  <div class="confirm-copy">
-                    GF30 kommer att få ett enda verifierat command 0.
-                    Tjänsten lyckas först efter färsk MQTT-readback.
-                  </div>
-                  <div class="confirm-actions">
-                    <button class="cancel-btn" @click=${this._cancel}>Avbryt</button>
-                    <button class="action-btn confirm" @click=${this._apply}>
-                      APPLY ${_fmtTemp(draft)}
-                    </button>
-                  </div>
+          <div class="control">
+            <div class="control-label">Ny target</div>
+            <div class="target-editor">
+              <button
+                class="step-btn"
+                ?disabled=${this._busy || draft == null || !canWrite}
+                @click=${() => this._nudge(-step)}
+                aria-label="Sänk target"
+              >−</button>
+              <input
+                type="number"
+                .value=${draft == null ? '' : String(draft)}
+                min=${this._config.min}
+                max=${this._config.max}
+                step=${step}
+                ?disabled=${this._busy || !canWrite}
+                @input=${(event) => this._setDraft(event.target.value)}
+              />
+              <button
+                class="step-btn"
+                ?disabled=${this._busy || draft == null || !canWrite}
+                @click=${() => this._nudge(step)}
+                aria-label="Höj target"
+              >+</button>
+            </div>
+            <div class="delta">
+              ${delta == null
+                ? nothing
+                : Math.abs(delta) < 0.001
+                  ? 'Oförändrad'
+                  : `${delta > 0 ? '+' : ''}${delta.toFixed(1)} °C från nuvarande target`}
+            </div>
+
+            ${!this._armed ? html`
+              <button
+                class="action-btn"
+                ?disabled=${this._busy || !canWrite || !changed}
+                @click=${this._arm}
+              >
+                ${this._busy ? 'Väntar på GF30…' : 'ARMERA TARGETÄNDRING'}
+              </button>
+            ` : html`
+              <div class="confirm-box">
+                <div class="confirm-title">Bekräfta target ${_fmtTemp(draft)}</div>
+                <div class="confirm-copy">
+                  GF30 får ett command 0.
+                  Tjänsten lyckas först efter färsk MQTT-readback.
                 </div>
-              `}
-
-          ${result
-            ? html`<div class="result ${result.state}">${result.text}</div>`
-            : nothing}
-
-          <div class="fineprint">
-            Device ID: ${deviceId ?? '—'} · Tillåtet intervall:
-            ${Number(this._config.min).toFixed(1)}–${Number(this._config.max).toFixed(1)} °C.
-            Ingen direkt heater/cooling/mode-styrning exponeras av kortet.
+                <div class="confirm-actions">
+                  <button class="cancel-btn" @click=${this._cancel}>Avbryt</button>
+                  <button
+                    class="action-btn confirm"
+                    ?disabled=${this._busy || !canWrite}
+                    @click=${this._apply}
+                  >
+                    APPLY ${_fmtTemp(draft)}
+                  </button>
+                </div>
+              </div>
+            `}
+            ${!canWrite ? html`
+              <p class="notice">
+                Target writes disabled until controller, MQTT telemetry,
+                entity mapping and current target are verified.
+              </p>
+            ` : nothing}
+            <div class="fineprint">
+              Device ID: ${deviceId ?? '—'} · Tillåtet intervall:
+              ${Number(this._config.min).toFixed(1)}–${Number(this._config.max).toFixed(1)} °C.
+              Ingen direkt heater/cooling/mode-styrning exponeras av kortet.
+            </div>
           </div>
-        </div>
+        ` : html`
+          <p class="notice">
+            Controller unavailable or missing required entities.
+            Control is hidden; diagnostics remain accessible below.
+          </p>
         `}
+
+        ${result
+          ? html`<div class="result ${result.state}">${result.text}</div>`
+          : nothing}
+
+        <details class="diagnostics">
+          <summary>Connection diagnostics / entity mapping</summary>
+          <div class="diag-grid">
+            ${this._diagnosticRows().map(([name, value]) => html`
+              <div class="diag-row">
+                <span>${name}</span><span>${_diagnosticValue(value)}</span>
+              </div>
+            `)}
+          </div>
+          ${issues.length ? html`
+            <div class="entity-help">
+              <strong>Configured entities needing attention:</strong>
+              <ul>${issues.map((issue) => html`<li>${issue}</li>`)}</ul>
+            </div>
+          ` : nothing}
+          <div class="entity-help">
+            <strong>Available Grainfather temperature/online entities:</strong>
+            ${this._suggestedEntities().length ? html`
+              <ul>${this._suggestedEntities().map((id) => html`<li>${id}</li>`)}</ul>
+            ` : html`
+              <p>None found. Check Developer Tools → States and the Grainfather device.</p>
+            `}
+            Entity IDs vary between Home Assistant installations. Update the
+            card YAML with the actual IDs; no automatic controller selection is made.
+          </div>
+        </details>
       </ha-card>
     `;
   }
