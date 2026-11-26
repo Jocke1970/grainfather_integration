@@ -118,6 +118,15 @@ async function main() {
   assert.match(test.card.render(), /device ID mismatch/);
 
   test = fixture();
+  test.card._config.device_id = 12345;
+  assert.equal(test.card._canWrite(), false);
+  assert.match(test.card.render(), /Configured device ID 12345 differs/);
+
+  test = fixture();
+  test.card.hass.states['sensor.gf_temp'].state = 'unknown';
+  assert.equal(test.card._canWrite(), false);
+
+  test = fixture();
   test.card._setDraft(21.5);
   test.card._arm();
   assert.equal(test.card._armed, true);
@@ -129,7 +138,7 @@ async function main() {
   assert.equal(test.calls[0][2].device_id, 92245);
   assert.equal(test.calls[0][2].temperature, 21.5);
 
-  console.log('GF30 card: 10 smoke checks passed');
+  console.log('GF30 card: 12 smoke checks passed');
 }
 
 main().catch((error) => {
