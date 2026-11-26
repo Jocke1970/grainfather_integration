@@ -13,10 +13,10 @@ bounded supervised target-temperature write path.
 
 ## Current BrewAssistant baseline
 
-Current development release: **2026.10.0b5**  
-Release label: **2026.10 Beta 5**  
-Includes: **GF30 Supervised Control Card + Controller State enum + compact offline card**  
-Release status: **2026.10.0b5 prerelease candidate validated**
+Latest published prerelease: **2026.10.0b7**  
+Includes: **GF30 MQTT telemetry, supervised target writes and diagnostic readback logging**  
+Unreleased branch work: **controller/MQTT status separation and offline-safe card diagnostics**  
+Release status: **UI changes require CI verification and a subsequent beta release**
 
 Verified on a real Grainfather GF30 / ESP-linked controller:
 
@@ -314,6 +314,40 @@ The card displays backend write/readback state from the temperature entity attri
 `pending`, `verified`, `mismatch` or `timeout`.
 
 The card never exposes heater, cooling or controller-mode writes.
+
+#### Controller and MQTT diagnostics (unreleased branch update)
+
+The card now shows **two independent status indicators**:
+- **Controller** — uses the configured `online_entity` binary sensor, or the
+  temperature entity's `controller_online` attribute if no online entity is set.
+- **MQTT** — checks `live_mqtt_transport_connected`, `live_mqtt_subscribed` and
+  `live_mqtt_event_fresh` from the GF30 temperature entity.
+
+The **Connection diagnostics / entity mapping** expander stays visible even when
+the controller is offline or the card's entity IDs are incorrect. It shows
+broker/subscription and telemetry freshness, timestamps, write results, and
+possible local Grainfather temperature/online entity IDs. It does **not**
+automatically select a different controller or send any diagnostic commands.
+
+The front-end disables target writes when live MQTT telemetry is stale or absent,
+a required entity is unavailable, the target cannot be read, or temperature
+and target sensors report different device IDs. The backend still requires
+explicit confirmation and a fresh MQTT target readback; backend protocol and
+timeout behavior are unchanged.
+
+If a fresh installation displays OFFLINE, first confirm the **actual**
+`temperature_entity`, `target_entity`, and `online_entity` names in
+**Developer Tools → States** and adjust the card's YAML. Entity IDs are
+installation-specific. The MQTT connection may be healthy even when the
+controller is switched off or the online entity is missing.
+
+To inspect MQTT without making any control changes, open the GF30 temperature
+entity in Developer Tools → States and read:
+`controller_transport`, `live_mqtt_broker`,
+`live_mqtt_transport_connected`, `live_mqtt_subscribed`,
+`live_mqtt_event_fresh`, `live_mqtt_event_last_received_at`,
+`live_temperature`, `live_target_temperature`, and
+`target_write_last_result`.
 
 Field verification on 2026-10-03 confirmed a Home Assistant supervised target change
 from 22.0 °C to 23.0 °C with command 0 and fresh MQTT readback. The request completed
