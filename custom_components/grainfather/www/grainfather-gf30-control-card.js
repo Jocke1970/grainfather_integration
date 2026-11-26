@@ -501,6 +501,10 @@ class GrainfatherGf30ControlCard extends LitElement {
     if (tempId != null && targetId != null && tempId !== targetId) {
       issues.push(`Temperature/Target device ID mismatch: ${tempId} vs ${targetId}`);
     }
+    const configuredId = _number(this._config.device_id);
+    if (configuredId != null && tempId != null && configuredId !== tempId) {
+      issues.push(`Configured device ID ${configuredId} differs from sensor ${tempId}`);
+    }
     return issues;
   }
 
@@ -527,6 +531,7 @@ class GrainfatherGf30ControlCard extends LitElement {
       && this._mqttStatus().key === 'online'
       && this._entityIssues().length === 0
       && this._currentTarget() != null
+      && _number(this._temperatureState()?.state) != null
       && deviceId != null
       && Number.isInteger(deviceId)
       && deviceId > 0
@@ -820,7 +825,7 @@ class GrainfatherGf30ControlCard extends LitElement {
         `}
 
         ${result
-          ? html`<div class="result ${result.state}">${result.text}</div>`
+          ? html`<div class="result ${result.state}">Last target write: ${result.text}</div>`
           : nothing}
 
         <details class="diagnostics">
