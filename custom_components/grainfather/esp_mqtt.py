@@ -233,11 +233,16 @@ class GrainfatherEspMqttSubscriber:
             subscription_ok = not any(
                 code == 0x80 for code in subscription_codes
             )
-            self._runtime_store.set_subscription_result(
-                list(self._chip_ids),
-                subscription_ok,
-                subscription_codes,
-            )
+            offset = 0
+            for chip_id in self._chip_ids:
+                topic_count = len(subscription_topics(chip_id))
+                device_codes = subscription_codes[offset : offset + topic_count]
+                offset += topic_count
+                self._runtime_store.set_subscription_result(
+                    [chip_id],
+                    not any(code == 0x80 for code in device_codes),
+                    device_codes,
+                )
             self._on_update()
             if not subscription_ok:
                 raise ConnectionError(
