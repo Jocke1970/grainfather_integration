@@ -243,7 +243,7 @@ async def _async_reconcile_esp_mqtt_subscriber(
     account = coordinator.data.account
     chip_ids = tuple(
         dict.fromkeys(
-            device.esp_chip_id.strip().casefold()
+            device.esp_chip_id.strip()
             for device in coordinator.data.fermentation_devices
             if device.esp_chip_id and device.esp_chip_id.strip()
         )
