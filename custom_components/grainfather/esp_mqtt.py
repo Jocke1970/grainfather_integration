@@ -76,13 +76,21 @@ class GrainfatherEspMqttSubscriber:
         endpoints: tuple[GrainfatherMqttEndpoint, ...] = DEFAULT_MQTT_ENDPOINTS,
     ) -> None:
         self._username, self._password = mqtt_credentials(user_id)
+        # MQTT topic filters are case-sensitive. Preserve the exact IDs returned
+        # by Grainfather (e.g. "prd-WFC-B12-...") for every PUBLISH/SUBSCRIBE.
+        # The runtime cache independently uses casefolded lookup keys.
         self._chip_ids = tuple(
             dict.fromkeys(
-                chip_id.strip().casefold()
+                chip_id.strip()
                 for chip_id in chip_ids
                 if chip_id and chip_id.strip()
             )
         )
+        self._chip_ids_by_normalized = {
+            chip_id.casefold(): chip_id for chip_id in self._chip_ids
+        }
+        if len(self._chip_ids_by_normalized) != len(self._chip_ids):
+            raise ValueError("Ambiguous Grainfather ESP chip IDs differing by case")
         self._runtime_store = runtime_store
         self._on_update = on_update
         self._endpoints = endpoints
@@ -99,7 +107,7 @@ class GrainfatherEspMqttSubscriber:
 
     @property
     def chip_ids(self) -> tuple[str, ...]:
-        """Return normalized ESP chip IDs owned by this subscriber."""
+        """Return original, case-preserving ESP chip IDs owned by subscriber."""
         return self._chip_ids
 
     def start(self) -> None:
@@ -320,7 +328,12 @@ class GrainfatherEspMqttSubscriber:
         if state is None:
             return
 
-        chip_id, topic_type = parse_device_topic(topic)
+        chip_id_key, topic_type = parse_device_topic(topic)
+        # parse_device_topic normalizes cache keys; outgoing commands need the
+        # original case-preserving chip ID to match broker ACLs.
+        chip_id = self._chip_ids_by_normalized.get(chip_id_key)
+        if chip_id is None:
+            return
         if topic_type == "status":
             if state.device_online is True:
                 await self._send_telemetry_keepalive(
@@ -383,7 +396,8 @@ class GrainfatherEspMqttSubscriber:
     ) -> float:
         """Set GF30 target and require a fresh MQTT readback before success."""
         normalized_chip_id = chip_id.strip().casefold()
-        if normalized_chip_id not in self._chip_ids:
+        mqtt_chip_id = self._chip_ids_by_normalized.get(normalized_chip_id)
+        if mqtt_chip_id is None:
             raise ValueError("Unknown Grainfather ESP chip id")
 
         target = float(temperature_c)
@@ -412,7 +426,7 @@ class GrainfatherEspMqttSubscriber:
             previous_event_at,
         )
         payload = target_temperature_payload(target)
-        packet = _build_target_temperature_packet(normalized_chip_id, target)
+        packet = _build_target_temperature_packet(mqtt_chip_id, target)
         self._runtime_store.mark_target_write_requested(normalized_chip_id, target)
         self._runtime_store.expect_local_command_echo(
             normalized_chip_id,
