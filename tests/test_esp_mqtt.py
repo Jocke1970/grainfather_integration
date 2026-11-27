@@ -1,7 +1,11 @@
 from __future__ import annotations
 
+import asyncio
+from unittest.mock import AsyncMock
+
 from custom_components.grainfather.esp_mqtt import (
     DEFAULT_MQTT_ENDPOINTS,
+    GrainfatherEspMqttSubscriber,
     _build_connect_packet,
     _build_subscribe_packet,
     _build_target_temperature_packet,
@@ -13,6 +17,8 @@ from custom_components.grainfather.esp_mqtt import (
 from custom_components.grainfather.esp_runtime import (
     PRIMARY_MQTT_BROKER,
     SECONDARY_MQTT_BROKER,
+    GrainfatherEspRuntimeStore,
+    subscription_topics,
 )
 
 
@@ -121,3 +127,53 @@ def test_build_target_temperature_packet_is_qos_zero_command_zero_only() -> None
     assert packet[0] == 0x30
     assert b"devices/abc123/command" in packet
     assert b'{"command":0,"value":"21.00"}' in packet
+
+
+def test_mixed_case_gf30_id_is_preserved_in_subscriptions() -> None:
+    mixed_case_id = "prd-WFC-B12-Example001"
+    legacy_id = "36002c000347383531363136"
+    subscriber = GrainfatherEspMqttSubscriber(
+        user_id="123",
+        chip_ids=(mixed_case_id, legacy_id),
+        runtime_store=GrainfatherEspRuntimeStore(),
+        on_update=lambda: None,
+    )
+
+    assert subscriber.chip_ids == (mixed_case_id, legacy_id)
+    topics = [
+        topic for chip_id in subscriber.chip_ids
+        for topic in subscription_topics(chip_id)
+    ]
+    assert len(topics) == 8
+    assert topics[0] == "devices/prd-WFC-B12-Example001/#"
+    assert topics[4] == f"devices/{legacy_id}/#"
+    packet = _build_subscribe_packet(1, tuple(topics))
+    assert b"devices/prd-WFC-B12-Example001/#" in packet
+    assert b"devices/prd-wfc-b12-example001/#" not in packet
+
+
+def test_mixed_case_gf30_id_is_preserved_in_outbound_commands() -> None:
+    chip_id = "prd-WFC-B12-Example001"
+    keepalive = _build_telemetry_keepalive_packet(chip_id, 120)
+    target = _build_target_temperature_packet(chip_id, 21.0)
+    assert b"devices/prd-WFC-B12-Example001/command" in keepalive
+    assert b"devices/prd-WFC-B12-Example001/command" in target
+
+
+def test_live_status_keepalive_uses_original_topic_casing() -> None:
+    chip_id = "prd-WFC-B12-Example001"
+    subscriber = GrainfatherEspMqttSubscriber(
+        user_id="123",
+        chip_ids=(chip_id, "abc123"),
+        runtime_store=GrainfatherEspRuntimeStore(),
+        on_update=lambda: None,
+    )
+    send_keepalive = AsyncMock()
+    subscriber._send_telemetry_keepalive = send_keepalive
+
+    topic = f"devices/{chip_id}/status".encode()
+    body = len(topic).to_bytes(2, "big") + topic + b"true"
+    asyncio.run(subscriber._handle_packet(None, 3, 0, body))
+
+    send_keepalive.assert_awaited_once_with(None, chip_id, 15)
+    assert subscriber._runtime_store.get(chip_id).device_online is True
