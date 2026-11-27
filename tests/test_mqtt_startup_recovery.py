@@ -13,7 +13,9 @@ def test_mqtt_reconcile_runs_after_later_coordinator_refresh() -> None:
     assert "async def _async_reconcile_esp_mqtt_subscriber" in source
     assert "_async_handle_coordinator_update" in source
     assert "_async_reconcile_esp_mqtt_subscriber(coordinator)" in source
-    # Case-sensitive MQTT topics must retain the original API casing.\n    assert "device.esp_chip_id.strip()" in source\n    assert "device.esp_chip_id.strip().casefold()" not in source
+    # Case-sensitive MQTT topics must retain the original API casing.
+    assert "device.esp_chip_id.strip()" in source
+    assert "device.esp_chip_id.strip().casefold()" not in source
 
 
 def test_mqtt_reconcile_is_idempotent_for_healthy_subscriber() -> None:
